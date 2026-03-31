@@ -130,6 +130,7 @@ export interface _SERVICE {
   'getSale' : ActorMethod<[SaleId], [] | [Sale]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isFirstUser' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'updateCustomer' : ActorMethod<[CustomerId, Customer], undefined>,
   'updateExpense' : ActorMethod<[ExpenseId, Expense], undefined>,

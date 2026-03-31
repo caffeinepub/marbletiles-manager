@@ -224,6 +224,7 @@ export interface backendInterface {
     getReports(): Promise<Reports>;
     getSale(id: SaleId): Promise<Sale | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    isFirstUser(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     updateCustomer(customerId: CustomerId, customer: Customer): Promise<void>;
@@ -611,6 +612,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getUserProfile(arg0);
             return from_candid_opt_n41(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async isFirstUser(): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isFirstUser();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isFirstUser();
+            return result;
         }
     }
     async isCallerAdmin(): Promise<boolean> {

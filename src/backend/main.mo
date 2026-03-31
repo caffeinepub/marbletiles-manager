@@ -162,9 +162,14 @@ actor {
 
   // ==== USER PROFILE MANAGEMENT ====
 
+  // Check if this is the very first user (no profiles exist yet)
+  public query func isFirstUser() : async Bool {
+    userProfiles.size() == 0;
+  };
+
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
+      return null;
     };
     userProfiles.get(caller);
   };
@@ -187,11 +192,31 @@ actor {
     };
 
     // Only superadmin can assign superadmin role
+    // EXCEPTION: if no profiles exist yet (first user bootstrap), allow superadmin assignment
     if (profile.role == "superadmin") {
-      requireSuperAdmin(caller);
+      if (userProfiles.size() > 0) {
+        // Not first user - must already be superadmin to claim superadmin
+        requireSuperAdmin(caller);
+      };
+      // else: first user bootstrap - allow freely
     };
 
     userProfiles.add(caller, profile);
+  };
+
+  // Superadmin can update another user's profile/role
+  public shared ({ caller }) func updateUserProfile(user : Principal, profile : UserProfile) : async () {
+    requireSuperAdmin(caller);
+    if (profile.role != "superadmin" and profile.role != "manager" and profile.role != "staff") {
+      Runtime.trap("Invalid role");
+    };
+    userProfiles.add(user, profile);
+  };
+
+  // Get all user profiles (superadmin only)
+  public query ({ caller }) func getAllUserProfiles() : async [(Principal, UserProfile)] {
+    requireSuperAdmin(caller);
+    userProfiles.toArray();
   };
 
   // ==== PRODUCT CATEGORY ==== (SUPERADMIN ONLY)

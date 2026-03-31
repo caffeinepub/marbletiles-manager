@@ -8,6 +8,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import type { UserProfile } from "./backend";
 import Layout from "./components/Layout";
 import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
@@ -19,24 +20,47 @@ import LoginPage from "./pages/LoginPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
 import SalesPage from "./pages/SalesPage";
+import SetupProfilePage from "./pages/SetupProfilePage";
+
+type ProfileState = "loading" | "missing" | "ready";
 
 function RootLayout() {
   const { identity, isInitializing } = useInternetIdentity();
-  const { actor } = useActor();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { actor, isFetching } = useActor();
+  const [profileState, setProfileState] = useState<ProfileState>("loading");
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
+  const loadProfile = () => {
+    if (!actor || !identity || isFetching) return;
+    actor
+      .getCallerUserProfile()
+      .then((profile) => {
+        if (profile === null) {
+          setProfileState("missing");
+          setUserProfile(null);
+        } else {
+          setUserProfile(profile);
+          setProfileState("ready");
+        }
+      })
+      .catch(() => {
+        // If call fails (e.g. guest not permitted), profile is missing
+        setProfileState("missing");
+        setUserProfile(null);
+      });
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadProfile is stable per render
   useEffect(() => {
-    if (actor && identity) {
-      actor
-        .isCallerAdmin()
-        .then(setIsAdmin)
-        .catch(() => setIsAdmin(false));
-    } else {
-      setIsAdmin(false);
+    if (!identity || !actor || isFetching) {
+      if (!identity) setProfileState("loading");
+      return;
     }
-  }, [actor, identity]);
+    setProfileState("loading");
+    loadProfile();
+  }, [actor, identity, isFetching]);
 
-  if (isInitializing) {
+  if (isInitializing || (identity && profileState === "loading")) {
     return (
       <div
         className="flex items-center justify-center h-screen"
@@ -59,8 +83,22 @@ function RootLayout() {
     return <LoginPage />;
   }
 
+  if (profileState === "missing") {
+    return (
+      <SetupProfilePage
+        onComplete={() => {
+          setProfileState("loading");
+          loadProfile();
+        }}
+      />
+    );
+  }
+
+  const isAdmin =
+    userProfile?.role === "superadmin" || userProfile?.role === "manager";
+
   return (
-    <Layout isAdmin={isAdmin}>
+    <Layout isAdmin={isAdmin} userProfile={userProfile}>
       <Outlet />
     </Layout>
   );

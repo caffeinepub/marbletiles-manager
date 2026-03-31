@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import type { UserProfile } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 const navItems = [
@@ -22,22 +23,41 @@ const navItems = [
   { path: "/sales", label: "Sales", icon: ShoppingCart },
   { path: "/payments", label: "Payments", icon: CreditCard },
   { path: "/customers", label: "Customers", icon: Users },
-  { path: "/expenses", label: "Expenses", icon: Receipt, adminOnly: true },
-  { path: "/reports", label: "Reports", icon: BarChart3, adminOnly: true },
+  { path: "/expenses", label: "Expenses", icon: Receipt, managerOnly: true },
+  { path: "/reports", label: "Reports", icon: BarChart3, managerOnly: true },
 ];
 
 interface LayoutProps {
   children: ReactNode;
   isAdmin: boolean;
+  userProfile: UserProfile | null;
 }
 
-export default function Layout({ children, isAdmin }: LayoutProps) {
+const roleLabel = (role: string) => {
+  if (role === "superadmin") return "Super Admin";
+  if (role === "manager") return "Manager";
+  return "Staff";
+};
+
+const roleBadgeStyle = (role: string) => {
+  if (role === "superadmin")
+    return { backgroundColor: "#B8924A20", color: "#B8924A" };
+  if (role === "manager")
+    return { backgroundColor: "#E8F5E9", color: "#2E7D32" };
+  return { backgroundColor: "#EEE", color: "#555" };
+};
+
+export default function Layout({
+  children,
+  isAdmin,
+  userProfile,
+}: LayoutProps) {
   const { clear } = useInternetIdentity();
   const router = useRouterState();
   const currentPath = router.location.pathname;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const visibleNav = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const visibleNav = navItems.filter((item) => !item.managerOnly || isAdmin);
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -81,6 +101,20 @@ export default function Layout({ children, isAdmin }: LayoutProps) {
           );
         })}
       </nav>
+
+      {userProfile && (
+        <div className="px-4 py-3 border-t border-charcoal-light">
+          <p className="text-white/70 text-xs font-medium truncate">
+            {userProfile.name}
+          </p>
+          <span
+            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-1"
+            style={roleBadgeStyle(userProfile.role)}
+          >
+            {roleLabel(userProfile.role)}
+          </span>
+        </div>
+      )}
 
       <div className="p-3 border-t border-charcoal-light">
         <Button
@@ -143,12 +177,12 @@ export default function Layout({ children, isAdmin }: LayoutProps) {
               "Radha Rani Marble House"}
           </h1>
           <div className="ml-auto flex items-center gap-2">
-            {isAdmin && (
+            {userProfile && (
               <span
                 className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                style={{ backgroundColor: "#B8924A20", color: "#B8924A" }}
+                style={roleBadgeStyle(userProfile.role)}
               >
-                Admin
+                {roleLabel(userProfile.role)}
               </span>
             )}
           </div>

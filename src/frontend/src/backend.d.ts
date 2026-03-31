@@ -115,6 +115,7 @@ export enum UserRole {
     guest = "guest"
 }
 export interface backendInterface {
+    isFirstUser(): Promise<boolean>;
     addCustomer(customer: Customer): Promise<CustomerId>;
     addExpense(expense: Expense): Promise<void>;
     addGSTRate(rate: GSTRate): Promise<void>;
