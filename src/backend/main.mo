@@ -114,12 +114,34 @@ actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  public type UserProfile = {
+  // The stable stored type — MUST NOT change fields to preserve upgrade compatibility
+  type UserProfileStored = {
     name : Text;
     role : Text; // "superadmin", "manager", or "staff"
   };
 
-  var userProfiles = Map.empty<Principal, UserProfile>();
+  // The public API type — includes username (stored separately)
+  public type UserProfile = {
+    name : Text;
+    role : Text;
+    username : Text;
+  };
+
+  // Stored profile map uses the stable type (no username field)
+  var userProfiles = Map.empty<Principal, UserProfileStored>();
+  // Username stored separately so we don't break stable var compatibility
+  var userUsernames = Map.empty<Principal, Text>();
+  // Passwords stored separately
+  var userPasswords = Map.empty<Principal, Text>();
+
+  // Helper: merge stored profile + username into full public UserProfile
+  private func toFullProfile(stored : UserProfileStored, principal : Principal) : UserProfile {
+    let username = switch (userUsernames.get(principal)) {
+      case (?u) { u };
+      case (null) { stored.name }; // fallback to name if no username set
+    };
+    { name = stored.name; role = stored.role; username };
+  };
 
   // ==== AUTHORIZATION HELPERS ====
 
@@ -162,7 +184,6 @@ actor {
 
   // ==== USER PROFILE MANAGEMENT ====
 
-  // Check if this is the very first user (no profiles exist yet)
   public query func isFirstUser() : async Bool {
     userProfiles.size() == 0;
   };
@@ -171,14 +192,20 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       return null;
     };
-    userProfiles.get(caller);
+    switch (userProfiles.get(caller)) {
+      case (null) { null };
+      case (?stored) { ?toFullProfile(stored, caller) };
+    };
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
     if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Can only view your own profile");
     };
-    userProfiles.get(user);
+    switch (userProfiles.get(user)) {
+      case (null) { null };
+      case (?stored) { ?toFullProfile(stored, user) };
+    };
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
@@ -186,37 +213,72 @@ actor {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
 
-    // Validate role
     if (profile.role != "superadmin" and profile.role != "manager" and profile.role != "staff") {
       Runtime.trap("Invalid role: must be superadmin, manager, or staff");
     };
 
-    // Only superadmin can assign superadmin role
-    // EXCEPTION: if no profiles exist yet (first user bootstrap), allow superadmin assignment
     if (profile.role == "superadmin") {
       if (userProfiles.size() > 0) {
-        // Not first user - must already be superadmin to claim superadmin
         requireSuperAdmin(caller);
       };
-      // else: first user bootstrap - allow freely
     };
 
-    userProfiles.add(caller, profile);
+    // Save the stable-compatible stored type (no username)
+    userProfiles.add(caller, { name = profile.name; role = profile.role });
+    // Save username separately
+    if (profile.username != "") {
+      userUsernames.add(caller, profile.username);
+    };
   };
 
-  // Superadmin can update another user's profile/role
+  // ==== PASSWORD MANAGEMENT ====
+
+  public shared ({ caller }) func setUserPassword(password : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+    if (password.size() < 4) {
+      Runtime.trap("Password must be at least 4 characters");
+    };
+    userPasswords.add(caller, password);
+  };
+
+  public query ({ caller }) func verifyUserPassword(password : Text) : async Bool {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return false;
+    };
+    switch (userPasswords.get(caller)) {
+      case (?stored) { stored == password };
+      case (null) { false };
+    };
+  };
+
+  public query ({ caller }) func hasUserPassword() : async Bool {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return false;
+    };
+    switch (userPasswords.get(caller)) {
+      case (?_) { true };
+      case (null) { false };
+    };
+  };
+
   public shared ({ caller }) func updateUserProfile(user : Principal, profile : UserProfile) : async () {
     requireSuperAdmin(caller);
     if (profile.role != "superadmin" and profile.role != "manager" and profile.role != "staff") {
       Runtime.trap("Invalid role");
     };
-    userProfiles.add(user, profile);
+    userProfiles.add(user, { name = profile.name; role = profile.role });
+    if (profile.username != "") {
+      userUsernames.add(user, profile.username);
+    };
   };
 
-  // Get all user profiles (superadmin only)
   public query ({ caller }) func getAllUserProfiles() : async [(Principal, UserProfile)] {
     requireSuperAdmin(caller);
-    userProfiles.toArray();
+    userProfiles.toArray().map(func((p, stored)) {
+      (p, toFullProfile(stored, p))
+    });
   };
 
   // ==== PRODUCT CATEGORY ==== (SUPERADMIN ONLY)
@@ -299,7 +361,6 @@ actor {
     switch (expenses.get(id)) {
       case (null) { Runtime.trap("Expense not found") };
       case (?existingExpense) {
-        // Only the creator or superadmin can update
         if (existingExpense.recordedBy != caller) {
           requireSuperAdmin(caller);
         };
@@ -389,7 +450,6 @@ actor {
     switch (sales.get(id)) {
       case (null) { Runtime.trap("Sale not found") };
       case (?existingSale) {
-        // Only the creator or manager+ can update
         if (existingSale.createdBy != caller) {
           requireManagerOrAbove(caller);
         };

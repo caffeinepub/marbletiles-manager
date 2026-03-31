@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Crown, Loader2, LogOut, UserCheck } from "lucide-react";
+import { Crown, Loader2, LogOut, User, UserCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useActor } from "../hooks/useActor";
@@ -22,7 +22,7 @@ export default function SetupProfilePage({ onComplete }: Props) {
     if (!actor) return;
     actor
       .isFirstUser()
-      .then(setIsFirstUser)
+      .then((first) => setIsFirstUser(first))
       .catch(() => setIsFirstUser(false));
   }, [actor]);
 
@@ -35,15 +35,15 @@ export default function SetupProfilePage({ onComplete }: Props) {
     setSaving(true);
     try {
       const role = isFirstUser ? "superadmin" : "staff";
-      await actor.saveCallerUserProfile({ name: name.trim(), role });
+      await actor.saveCallerUserProfile({ name: name.trim(), role } as any);
       toast.success(
         isFirstUser
-          ? "Welcome! You are now set up as Super Admin."
-          : "Profile created! You are now set up as Staff.",
+          ? "স্বাগতম! আপনি Super Admin হিসেবে সেট হয়েছেন।"
+          : "Profile তৈরি হয়েছে! Admin আপনার role পরিবর্তন করতে পারবেন।",
       );
       onComplete();
     } catch {
-      toast.error("Failed to save profile. Please try again.");
+      toast.error("Profile save করা যায়নি। আবার চেষ্টা করুন।");
     } finally {
       setSaving(false);
     }
@@ -55,7 +55,6 @@ export default function SetupProfilePage({ onComplete }: Props) {
       style={{ backgroundColor: "#F3F0EA" }}
     >
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img
             src="/assets/file-019d443c-2e5b-744a-80bb-f49f214ea06a.jpg"
@@ -67,7 +66,7 @@ export default function SetupProfilePage({ onComplete }: Props) {
           </h1>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-card p-8">
+        <div className="bg-white rounded-2xl shadow-lg p-8">
           {isFirstUser === null ? (
             <div className="flex justify-center py-6">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -89,28 +88,33 @@ export default function SetupProfilePage({ onComplete }: Props) {
                 </div>
                 <div>
                   <h2 className="text-base font-semibold">
-                    {isFirstUser ? "Set Up as Owner" : "Create Your Profile"}
+                    {isFirstUser
+                      ? "Owner হিসেবে সেটআপ"
+                      : "আপনার Profile তৈরি করুন"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
                     {isFirstUser
-                      ? "You are the first user — you will become Super Admin"
-                      : "You will be added as Staff (admin can upgrade your role)"}
+                      ? "আপনি প্রথম user — আপনি Super Admin হবেন"
+                      : "আপনাকে Staff হিসেবে যোগ করা হবে"}
                   </p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <Label>Your Name</Label>
-                  <Input
-                    className="mt-1"
-                    placeholder="e.g. Ramesh Kumar"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSetup()}
-                    autoFocus
-                    data-ocid="setup.name_input"
-                  />
+                  <Label>আপনার নাম</Label>
+                  <div className="relative mt-1">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="যেমন: Ramesh Kumar"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSetup()}
+                      autoFocus
+                      data-ocid="setup.input"
+                    />
+                  </div>
                 </div>
 
                 <div
@@ -122,8 +126,8 @@ export default function SetupProfilePage({ onComplete }: Props) {
                   </p>
                   <p className="text-muted-foreground mt-0.5">
                     {isFirstUser
-                      ? "Full access to all features including settings, reports, and user management"
-                      : "Access to billing and stock check. Super Admin can upgrade your role."}
+                      ? "আপনি Super Admin হিসেবে সেট হবেন — সব feature-এ access থাকবে"
+                      : "আপনাকে Staff হিসেবে যোগ করা হবে। Admin আপনার role পরিবর্তন করতে পারবেন।"}
                   </p>
                 </div>
 
@@ -137,7 +141,7 @@ export default function SetupProfilePage({ onComplete }: Props) {
                   {saving ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : null}
-                  {isFirstUser ? "Set Up My Account" : "Create Profile"}
+                  {isFirstUser ? "শুরু করুন" : "Setup Complete"}
                 </Button>
               </div>
             </>

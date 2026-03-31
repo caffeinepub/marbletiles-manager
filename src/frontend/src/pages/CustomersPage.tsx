@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -9,19 +10,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Edit2,
-  Loader2,
-  MessageCircle,
-  Plus,
-  Search,
-  Users,
-} from "lucide-react";
+import { Principal } from "@icp-sdk/core/principal";
+import { Edit2, Loader2, Plus, Search, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Customer } from "../backend";
+import type { Customer, Sale } from "../backend";
 import { useActor } from "../hooks/useActor";
-import { formatINR } from "../lib/formatting";
+import { formatDate, formatINR } from "../lib/formatting";
 
 const emptyForm = () => ({
   name: "",
@@ -33,6 +28,7 @@ const emptyForm = () => ({
 export default function CustomersPage() {
   const { actor, isFetching } = useActor();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -40,14 +36,17 @@ export default function CustomersPage() {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [ledgerCustomer, setLedgerCustomer] = useState<Customer | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is an intentional reload trigger
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is intentional
   useEffect(() => {
     if (!actor || isFetching) return;
     setLoading(true);
-    actor
-      .getAllCustomers()
-      .then(setCustomers)
+    Promise.all([actor.getAllCustomers(), actor.getAllSales()])
+      .then(([custs, s]) => {
+        setCustomers(custs);
+        setSales(s);
+      })
       .finally(() => setLoading(false));
   }, [actor, isFetching, refreshKey]);
 
@@ -58,12 +57,6 @@ export default function CustomersPage() {
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.includes(search) ||
       c.email.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  const totalWithDue = customers.filter((c) => c.outstandingDue > 0n).length;
-  const totalDueAmount = customers.reduce(
-    (sum, c) => sum + c.outstandingDue,
-    0n,
   );
 
   const openCreate = () => {
@@ -86,7 +79,7 @@ export default function CustomersPage() {
   const handleSave = async () => {
     if (!actor) return;
     if (!form.name.trim()) {
-      toast.error("Customer name is required");
+      toast.error("Name is required");
       return;
     }
     setSaving(true);
@@ -122,83 +115,85 @@ export default function CustomersPage() {
     }
   };
 
-  const whatsappReminder = (c: Customer) => {
-    const phone = c.phone.replace(/\D/g, "");
-    const amount = (Number(c.outstandingDue) / 100).toFixed(2);
-    const msg = encodeURIComponent(
-      `Dear ${c.name}, you have an outstanding due of \u20B9${amount} at RADHA RANI MARBLE HOUSE. Please clear at your earliest. Thank you.`,
-    );
-    window.open(`https://wa.me/91${phone}?text=${msg}`, "_blank");
-  };
+  const custSales = ledgerCustomer
+    ? sales
+        .filter((s) => s.customerId === ledgerCustomer.id)
+        .sort((a, b) => Number(b.createdAt - a.createdAt))
+    : [];
+
+  const totalCustomers = customers.length;
+  const totalDue = customers.reduce((s, c) => s + c.outstandingDue, 0n);
+  const totalPurchases = customers.reduce((s, c) => s + c.totalPurchases, 0n);
 
   return (
     <div className="space-y-4">
-      {!loading && customers.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl shadow-card p-4 flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: "#B8924A20" }}
-            >
-              <Users className="w-5 h-5" style={{ color: "#B8924A" }} />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total Customers</p>
-              <p className="text-xl font-bold text-foreground">
-                {customers.length}
-              </p>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-card p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-50">
-              <span className="text-red-500 font-bold text-sm">&#8377;</span>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Outstanding Due</p>
-              <p className="text-xl font-bold text-red-600">
-                {formatINR(totalDueAmount)}
-              </p>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-card p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-amber-50">
-              <span className="text-amber-500 font-bold text-sm">#</span>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Pending Dues</p>
-              <p className="text-xl font-bold text-amber-600">
-                {totalWithDue} customers
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Header */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            className="pl-9 bg-white"
-            placeholder="Search customers..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            data-ocid="customers.search_input"
-          />
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Customers</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage your customer database
+          </p>
         </div>
         <Button
           className="text-white flex-shrink-0"
           style={{ backgroundColor: "#B8924A" }}
           onClick={openCreate}
-          data-ocid="customers.add_button"
+          data-ocid="customers.primary_button"
         >
           <Plus className="w-4 h-4 mr-1" /> Add Customer
         </Button>
       </div>
 
+      {/* Summary Cards */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          {
+            label: "Total Customers",
+            value: String(totalCustomers),
+            icon: <Users className="w-4 h-4" />,
+          },
+          {
+            label: "Total Purchases",
+            value: formatINR(totalPurchases),
+            icon: null,
+          },
+          { label: "Outstanding Dues", value: formatINR(totalDue), icon: null },
+        ].map((c) => (
+          <Card
+            key={c.label}
+            className="bg-white shadow-card border-0 rounded-xl"
+          >
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{c.label}</p>
+              <p
+                className="text-lg font-bold mt-1"
+                style={{ color: "#B8924A" }}
+              >
+                {c.value}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-xs">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          className="pl-9 bg-white"
+          placeholder="Search by name or phone..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          data-ocid="customers.search_input"
+        />
+      </div>
+
+      {/* Table */}
       {loading ? (
-        <div data-ocid="customers.loading_state" className="space-y-2">
+        <div className="space-y-2" data-ocid="customers.loading_state">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-16 rounded-xl" />
+            <Skeleton key={i} className="h-14 rounded-xl" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -214,20 +209,23 @@ export default function CustomersPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">
-                    Customer
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    NAME
                   </th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">
-                    Contact
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase hidden sm:table-cell">
+                    PHONE
                   </th>
-                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground hidden sm:table-cell">
-                    Total Purchases
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase hidden md:table-cell">
+                    EMAIL
                   </th>
-                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground">
-                    Outstanding
+                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    TOTAL PURCHASES
                   </th>
-                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground">
-                    Actions
+                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    OUTSTANDING
+                  </th>
+                  <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    ACTIONS
                   </th>
                 </tr>
               </thead>
@@ -239,50 +237,48 @@ export default function CustomersPage() {
                     data-ocid={`customers.item.${i + 1}`}
                   >
                     <td className="px-4 py-3">
-                      <p className="font-medium text-foreground">{c.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {c.address}
-                      </p>
+                      <p className="font-medium">{c.name}</p>
+                      {c.phone && (
+                        <p className="text-xs text-muted-foreground sm:hidden">
+                          {c.phone}
+                        </p>
+                      )}
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <p className="text-foreground">{c.phone}</p>
-                      <p className="text-xs text-muted-foreground">{c.email}</p>
+                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
+                      {c.phone || "—"}
                     </td>
-                    <td className="px-4 py-3 text-right hidden sm:table-cell text-muted-foreground">
+                    <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                      {c.email || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">
                       {formatINR(c.totalPurchases)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {c.outstandingDue > 0n ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                        <span className="text-red-600 font-semibold">
                           {formatINR(c.outstandingDue)}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                          Cleared
-                        </span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {c.outstandingDue > 0n && c.phone && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-green-600 hover:text-green-700"
-                            onClick={() => whatsappReminder(c)}
-                            data-ocid={`customers.secondary_button.${i + 1}`}
-                            title="Send WhatsApp Reminder"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           onClick={() => openEdit(c)}
                           data-ocid={`customers.edit_button.${i + 1}`}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLedgerCustomer(c)}
+                          data-ocid={`customers.open_modal_button.${i + 1}`}
+                        >
+                          Ledger
                         </Button>
                       </div>
                     </td>
@@ -294,56 +290,38 @@ export default function CustomersPage() {
         </div>
       )}
 
+      {/* Add/Edit Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md" data-ocid="customers.dialog">
+        <DialogContent data-ocid="customers.dialog">
           <DialogHeader>
             <DialogTitle>
               {editing ? "Edit Customer" : "Add Customer"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div>
-              <Label>Full Name</Label>
-              <Input
-                className="mt-1"
-                value={form.name}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, name: e.target.value }))
-                }
-                data-ocid="customers.input"
-              />
-            </div>
-            <div>
-              <Label>Phone</Label>
-              <Input
-                className="mt-1"
-                value={form.phone}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, phone: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input
-                className="mt-1"
-                type="email"
-                value={form.email}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, email: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Label>Address</Label>
-              <Input
-                className="mt-1"
-                value={form.address}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, address: e.target.value }))
-                }
-              />
-            </div>
+            {[
+              { label: "Name *", key: "name", placeholder: "Customer name" },
+              { label: "Phone", key: "phone", placeholder: "+91 98765 43210" },
+              {
+                label: "Email",
+                key: "email",
+                placeholder: "customer@example.com",
+              },
+              { label: "Address", key: "address", placeholder: "Full address" },
+            ].map((f) => (
+              <div key={f.key}>
+                <Label>{f.label}</Label>
+                <Input
+                  className="mt-1"
+                  placeholder={f.placeholder}
+                  value={form[f.key as keyof typeof form]}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
+                  }
+                  data-ocid="customers.input"
+                />
+              </div>
+            ))}
           </div>
           <DialogFooter>
             <Button
@@ -358,12 +336,114 @@ export default function CustomersPage() {
               style={{ backgroundColor: "#B8924A" }}
               onClick={handleSave}
               disabled={saving}
-              data-ocid="customers.save_button"
+              data-ocid="customers.submit_button"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-1" />
               ) : null}
-              {editing ? "Update" : "Add"} Customer
+              {editing ? "Update" : "Add Customer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ledger Dialog */}
+      <Dialog
+        open={!!ledgerCustomer}
+        onOpenChange={(v) => !v && setLedgerCustomer(null)}
+      >
+        <DialogContent className="max-w-2xl" data-ocid="customers.modal">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle>Ledger — {ledgerCustomer?.name}</DialogTitle>
+            </div>
+          </DialogHeader>
+          {ledgerCustomer && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-muted-foreground">Total Purchases</p>
+                  <p className="font-bold text-lg" style={{ color: "#B8924A" }}>
+                    {formatINR(ledgerCustomer.totalPurchases)}
+                  </p>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-muted-foreground">Outstanding Due</p>
+                  <p className="font-bold text-lg text-red-600">
+                    {formatINR(ledgerCustomer.outstandingDue)}
+                  </p>
+                </div>
+              </div>
+              {custSales.length === 0 ? (
+                <p className="text-sm text-center text-muted-foreground py-6">
+                  No invoices found
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 font-medium text-muted-foreground">
+                          Invoice
+                        </th>
+                        <th className="text-left py-2 font-medium text-muted-foreground">
+                          Date
+                        </th>
+                        <th className="text-right py-2 font-medium text-muted-foreground">
+                          Amount
+                        </th>
+                        <th className="text-right py-2 font-medium text-muted-foreground">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {custSales.map((s, i) => (
+                        <tr
+                          key={String(s.id)}
+                          className="border-b border-border last:border-0"
+                          data-ocid={`customers.row.${i + 1}`}
+                        >
+                          <td
+                            className="py-2 font-medium"
+                            style={{ color: "#B8924A" }}
+                          >
+                            {s.invoiceNumber}
+                          </td>
+                          <td className="py-2 text-muted-foreground">
+                            {formatDate(s.createdAt)}
+                          </td>
+                          <td className="py-2 text-right">
+                            {formatINR(s.grandTotal)}
+                          </td>
+                          <td className="py-2 text-right">
+                            <span
+                              className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                                s.paymentStatus === "paid"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : s.paymentStatus === "unpaid"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {s.paymentStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLedgerCustomer(null)}
+              data-ocid="customers.close_button"
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

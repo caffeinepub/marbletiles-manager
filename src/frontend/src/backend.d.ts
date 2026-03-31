@@ -10,6 +10,7 @@ export type Option<T> = Some<T> | None;
 export interface UserProfile {
     name: string;
     role: string;
+    username: string;
 }
 export interface SaleItem {
     productId: ProductId;
@@ -142,11 +143,14 @@ export interface backendInterface {
     getReports(): Promise<Reports>;
     getSale(id: SaleId): Promise<Sale | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    hasUserPassword(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    setUserPassword(password: string): Promise<void>;
     updateCustomer(customerId: CustomerId, customer: Customer): Promise<void>;
     updateExpense(id: ExpenseId, expense: Expense): Promise<void>;
     updatePayment(paymentId: PaymentId, payment: Payment): Promise<void>;
     updateProduct(name: string, product: Product): Promise<void>;
     updateSale(id: SaleId, sale: Sale): Promise<void>;
+    verifyUserPassword(password: string): Promise<boolean>;
 }

@@ -1,21 +1,30 @@
 import { Button } from "@/components/ui/button";
-import { Link, useRouterState } from "@tanstack/react-router";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
   ChevronRight,
   CreditCard,
+  Landmark,
   LayoutDashboard,
   LogOut,
   Menu,
   Package,
+  Plus,
   Receipt,
+  Settings2,
+  Shield,
   ShoppingCart,
   Users,
   X,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { UserProfile } from "../backend";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -25,12 +34,16 @@ const navItems = [
   { path: "/customers", label: "Customers", icon: Users },
   { path: "/expenses", label: "Expenses", icon: Receipt, managerOnly: true },
   { path: "/reports", label: "Reports", icon: BarChart3, managerOnly: true },
+  { path: "/finance", label: "Finance", icon: Landmark, managerOnly: true },
+  { path: "/admin", label: "Admin Panel", icon: Shield, managerOnly: true },
+  { path: "/settings", label: "Settings", icon: Settings2 },
 ];
 
 interface LayoutProps {
   children: ReactNode;
   isAdmin: boolean;
   userProfile: UserProfile | null;
+  onLogout: () => void;
 }
 
 const roleLabel = (role: string) => {
@@ -47,13 +60,31 @@ const roleBadgeStyle = (role: string) => {
   return { backgroundColor: "#EEE", color: "#555" };
 };
 
+function RealTimeClock() {
+  const [time, setTime] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="hidden sm:inline-flex text-xs font-mono text-muted-foreground tabular-nums">
+      {time.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })}
+    </span>
+  );
+}
+
 export default function Layout({
   children,
   isAdmin,
   userProfile,
+  onLogout,
 }: LayoutProps) {
-  const { clear } = useInternetIdentity();
   const router = useRouterState();
+  const navigate = useNavigate();
   const currentPath = router.location.pathname;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -63,9 +94,12 @@ export default function Layout({
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-5 py-6 border-b border-charcoal-light">
         <img
-          src="/assets/file-019d443c-2e5b-744a-80bb-f49f214ea06a.jpg"
+          src="/assets/file-019d4401-ef71-762a-a4e0-e28a94ec321e.jpg"
           className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
           alt="RR"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
         />
         <div className="min-w-0">
           <p className="text-white font-semibold text-sm leading-tight">
@@ -92,7 +126,7 @@ export default function Layout({
                   : "text-white/60 hover:text-white/90 hover:bg-white/5"
               }`}
               style={active ? { backgroundColor: "#B8924A" } : {}}
-              data-ocid={`nav.${item.label.toLowerCase()}.link`}
+              data-ocid={`nav.${item.label.toLowerCase().replace(" ", "-")}.link`}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
               <span>{item.label}</span>
@@ -120,7 +154,7 @@ export default function Layout({
         <Button
           variant="ghost"
           className="w-full justify-start text-white/60 hover:text-white hover:bg-white/5 gap-3 text-sm"
-          onClick={clear}
+          onClick={onLogout}
           data-ocid="nav.logout.button"
         >
           <LogOut className="w-4 h-4" />
@@ -129,6 +163,10 @@ export default function Layout({
       </div>
     </div>
   );
+
+  const pageTitle =
+    navItems.find((n) => n.path === currentPath)?.label ??
+    "Radha Rani Marble House";
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -173,13 +211,49 @@ export default function Layout({
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="text-base font-semibold text-foreground capitalize">
-            {navItems.find((n) => n.path === currentPath)?.label ??
-              "Radha Rani Marble House"}
+            {pageTitle}
           </h1>
-          <div className="ml-auto flex items-center gap-2">
+
+          <div className="ml-auto flex items-center gap-3">
+            <RealTimeClock />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  className="text-white gap-1"
+                  style={{ backgroundColor: "#B8924A" }}
+                  data-ocid="nav.primary_button"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Quick Add</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" data-ocid="nav.dropdown_menu">
+                <DropdownMenuItem
+                  onClick={() => navigate({ to: "/sales" })}
+                  data-ocid="nav.sale.link"
+                >
+                  <ShoppingCart className="w-4 h-4 mr-2" /> New Sale
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => navigate({ to: "/inventory" })}
+                  data-ocid="nav.inventory.link"
+                >
+                  <Package className="w-4 h-4 mr-2" /> Add Product
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => navigate({ to: "/expenses" })}
+                  data-ocid="nav.expense.link"
+                >
+                  <Receipt className="w-4 h-4 mr-2" /> Record Expense
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {userProfile && (
               <span
-                className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                 style={roleBadgeStyle(userProfile.role)}
               >
                 {roleLabel(userProfile.role)}

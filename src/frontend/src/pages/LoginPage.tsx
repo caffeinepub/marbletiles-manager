@@ -1,9 +1,31 @@
 import { Button } from "@/components/ui/button";
-import { Loader2, Shield } from "lucide-react";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState } from "react";
+import { loginLocal } from "../hooks/useLocalAuth";
 
-export default function LoginPage() {
-  const { login, isLoggingIn } = useInternetIdentity();
+interface Props {
+  onLogin: () => void;
+}
+
+export default function LoginPage({ onLogin }: Props) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const result = loginLocal(username.trim(), password);
+    setLoading(false);
+    if (result.success) {
+      onLogin();
+    } else {
+      setError(result.error ?? "Login failed");
+    }
+  };
 
   return (
     <div
@@ -11,64 +33,86 @@ export default function LoginPage() {
       style={{ backgroundColor: "#F3F0EA" }}
     >
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img
-            src="/assets/file-019d443c-2e5b-744a-80bb-f49f214ea06a.jpg"
+            src="/assets/file-019d4401-ef71-762a-a4e0-e28a94ec321e.jpg"
             className="w-32 h-32 rounded-2xl object-cover shadow-lg mb-4"
             alt="Radha Rani Marble House"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
           />
-          <h1 className="text-2xl font-display font-bold text-foreground">
-            Radha Rani Marble House
+          <h1 className="text-2xl font-bold" style={{ color: "#B8924A" }}>
+            RADHA RANI MARBLE HOUSE
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Where Luxury Meets Stone
           </p>
         </div>
 
-        {/* Card */}
-        <div className="bg-white rounded-2xl shadow-card p-8">
-          <h2 className="text-lg font-semibold text-foreground mb-1">
-            Welcome back
-          </h2>
-          <p className="text-sm text-muted-foreground mb-6">
-            Sign in to access your shop management dashboard.
-          </p>
+        <div className="bg-white rounded-2xl shadow-lg p-8 flex flex-col gap-5">
+          <div className="text-center">
+            <h2 className="text-lg font-semibold text-foreground mb-1">
+              Dashboard-এ প্রবেশ করুন
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              আপনার username ও password দিন
+            </p>
+          </div>
 
-          <Button
-            className="w-full text-white font-semibold"
-            style={{ backgroundColor: "#B8924A" }}
-            onClick={login}
-            disabled={isLoggingIn}
-            data-ocid="login.primary_button"
-          >
-            {isLoggingIn ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...
-              </>
-            ) : (
-              <>
-                <Shield className="mr-2 h-4 w-4" /> Sign In Securely
-              </>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="username লিখুন"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                data-ocid="login.input"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="password লিখুন"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                data-ocid="login.input"
+              />
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 text-center font-medium">
+                {error}
+              </p>
             )}
-          </Button>
 
-          <p className="text-xs text-center text-muted-foreground mt-4">
-            Secured by Internet Identity — no passwords required
-          </p>
-        </div>
+            <Button
+              type="submit"
+              className="w-full text-white font-semibold py-3"
+              style={{ backgroundColor: "#B8924A" }}
+              disabled={loading}
+              data-ocid="login.submit_button"
+            >
+              {loading ? "Loading..." : "Login করুন"}
+            </Button>
+          </form>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          &copy; {new Date().getFullYear()}. Built with love using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            className="underline hover:text-foreground"
-            target="_blank"
-            rel="noreferrer"
+          <div
+            className="rounded-lg p-3 text-xs text-center"
+            style={{ backgroundColor: "#B8924A15" }}
           >
-            caffeine.ai
-          </a>
-        </p>
+            <p className="font-medium" style={{ color: "#B8924A" }}>
+              Admin: radharanim123 / radha123456
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -16,23 +17,40 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Edit2, Loader2, Plus, Trash2 } from "lucide-react";
+import { Principal } from "@icp-sdk/core/principal";
+import { Loader2, Plus, Trash2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type Expense, ExpenseCategory } from "../backend";
 import { useActor } from "../hooks/useActor";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { formatDate, formatINR, rupeesToPaise } from "../lib/formatting";
 
-const catColor = (c: string) => {
-  if (c === "labour") return "bg-blue-100 text-blue-700";
-  if (c === "rent") return "bg-purple-100 text-purple-700";
-  if (c === "transport") return "bg-green-100 text-green-700";
-  if (c === "electricity") return "bg-yellow-100 text-yellow-700";
-  return "bg-gray-100 text-gray-700";
+const catLabel: Record<string, string> = {
+  labour: "Labour",
+  electricity: "Electricity",
+  transport: "Transport",
+  rent: "Rent",
+  other: "Other",
 };
 
-const emptyFormState = () => ({
+const catBadge = (c: string) => {
+  const cls: Record<string, string> = {
+    labour: "bg-blue-100 text-blue-700",
+    rent: "bg-purple-100 text-purple-700",
+    transport: "bg-green-100 text-green-700",
+    electricity: "bg-yellow-100 text-yellow-700",
+    other: "bg-gray-100 text-gray-700",
+  };
+  return (
+    <span
+      className={`px-2 py-0.5 rounded text-xs font-bold ${cls[c] ?? "bg-gray-100 text-gray-700"}`}
+    >
+      {catLabel[c] ?? c}
+    </span>
+  );
+};
+
+const emptyForm = () => ({
   category: ExpenseCategory.other as ExpenseCategory,
   description: "",
   amountRupees: "",
@@ -41,82 +59,60 @@ const emptyFormState = () => ({
 
 export default function ExpensesPage() {
   const { actor, isFetching } = useActor();
-  const { identity } = useInternetIdentity();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Expense | null>(null);
-  const [form, setForm] = useState(emptyFormState());
+  const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<bigint | null>(null);
+  const [catFilter, setCatFilter] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is an intentional reload trigger
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is intentional
   useEffect(() => {
     if (!actor || isFetching) return;
     setLoading(true);
     actor
       .getAllExpenses()
-      .then((all) =>
-        setExpenses([...all].sort((a, b) => Number(b.date - a.date))),
-      )
+      .then((e) => setExpenses(e.sort((a, b) => Number(b.date - a.date))))
       .finally(() => setLoading(false));
   }, [actor, isFetching, refreshKey]);
 
   const reload = () => setRefreshKey((k) => k + 1);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm(emptyFormState());
-    setOpen(true);
-  };
+  const filtered =
+    catFilter === "all"
+      ? expenses
+      : expenses.filter((e) => e.category === catFilter);
 
-  const openEdit = (e: Expense) => {
-    setEditing(e);
-    setForm({
-      category: e.category,
-      description: e.description,
-      amountRupees: (Number(e.amount) / 100).toString(),
-      date: new Date(Number(e.date) / 1_000_000).toISOString().split("T")[0],
-    });
-    setOpen(true);
-  };
+  const total = expenses.reduce((s, e) => s + e.amount, 0n);
+  const byCategory = (cat: string) =>
+    expenses
+      .filter((e) => e.category === cat)
+      .reduce((s, e) => s + e.amount, 0n);
 
   const handleSave = async () => {
-    if (!actor || !identity) return;
-    if (!form.description.trim()) {
-      toast.error("Description is required");
+    if (!actor) return;
+    if (!form.amountRupees || !form.description) {
+      toast.error("Fill all fields");
       return;
     }
     setSaving(true);
     try {
-      const amount = rupeesToPaise(form.amountRupees || "0");
-      const dateMs = new Date(form.date).getTime();
-      const dateNano = BigInt(dateMs) * 1_000_000n;
-      if (editing) {
-        await actor.updateExpense(editing.id, {
-          ...editing,
-          category: form.category,
-          description: form.description,
-          amount,
-          date: dateNano,
-        });
-        toast.success("Expense updated");
-      } else {
-        await actor.addExpense({
-          id: 0n,
-          category: form.category,
-          description: form.description,
-          amount,
-          date: dateNano,
-          recordedBy: identity.getPrincipal(),
-        });
-        toast.success("Expense added");
-      }
+      await actor.addExpense({
+        id: 0n,
+        category: form.category,
+        description: form.description,
+        amount: rupeesToPaise(form.amountRupees),
+        date: 0n,
+        recordedBy: Principal.anonymous(),
+      });
+      toast.success("Expense added");
       setOpen(false);
+      setForm(emptyForm());
       reload();
     } catch {
-      toast.error("Failed to save expense");
+      toast.error("Failed to add expense");
     } finally {
       setSaving(false);
     }
@@ -136,68 +132,81 @@ export default function ExpensesPage() {
     }
   };
 
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0n);
-  const categories = [
-    ExpenseCategory.labour,
-    ExpenseCategory.electricity,
-    ExpenseCategory.rent,
-    ExpenseCategory.transport,
-    ExpenseCategory.other,
-  ];
-  const catTotals = categories.map((cat) => ({
-    cat,
-    total: expenses
-      .filter((e) => e.category === cat)
-      .reduce((s, e) => s + e.amount, 0n),
-  }));
-
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Expenses</h1>
+          <p className="text-sm text-muted-foreground">
+            Track business expenses by category
+          </p>
+        </div>
         <Button
-          className="text-white"
+          className="text-white flex-shrink-0"
           style={{ backgroundColor: "#B8924A" }}
-          onClick={openCreate}
-          data-ocid="expenses.add_button"
+          onClick={() => {
+            setForm(emptyForm());
+            setOpen(true);
+          }}
+          data-ocid="expenses.primary_button"
         >
           <Plus className="w-4 h-4 mr-1" /> Add Expense
         </Button>
       </div>
 
-      {!loading && expenses.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div
-            className="bg-white rounded-xl shadow-card p-4 border-l-4"
-            style={{ borderLeftColor: "#B8924A" }}
-          >
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="text-base font-bold" style={{ color: "#B8924A" }}>
-              {formatINR(totalAmount)}
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <Card className="bg-white shadow-card border-0 rounded-xl">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Total Expenses</p>
+            <p className="text-lg font-bold mt-1 text-red-600">
+              {formatINR(total)}
             </p>
-          </div>
-          {catTotals.map(({ cat, total }) => (
-            <div key={cat} className="bg-white rounded-xl shadow-card p-4">
-              <p className="text-xs text-muted-foreground capitalize">{cat}</p>
-              <p className="text-base font-bold text-foreground">
-                {formatINR(total)}
+          </CardContent>
+        </Card>
+        {Object.entries(catLabel).map(([key, label]) => (
+          <Card key={key} className="bg-white shadow-card border-0 rounded-xl">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p
+                className="text-lg font-bold mt-1"
+                style={{ color: "#B8924A" }}
+              >
+                {formatINR(byCategory(key))}
               </p>
-            </div>
-          ))}
-        </div>
-      )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
+      {/* Filter */}
+      <Select value={catFilter} onValueChange={setCatFilter}>
+        <SelectTrigger className="w-44 bg-white" data-ocid="expenses.select">
+          <SelectValue placeholder="All Categories" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Categories</SelectItem>
+          {Object.entries(catLabel).map(([k, v]) => (
+            <SelectItem key={k} value={k}>
+              {v}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* Table */}
       {loading ? (
-        <div data-ocid="expenses.loading_state" className="space-y-2">
+        <div className="space-y-2" data-ocid="expenses.loading_state">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-16 rounded-xl" />
+            <Skeleton key={i} className="h-14 rounded-xl" />
           ))}
         </div>
-      ) : expenses.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div
           className="bg-white rounded-xl p-12 text-center shadow-card"
           data-ocid="expenses.empty_state"
         >
-          <p className="text-muted-foreground">No expenses recorded yet.</p>
+          <p className="text-muted-foreground">No expenses found.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-card overflow-hidden">
@@ -205,69 +214,55 @@ export default function ExpensesPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">
-                    Description
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    DATE
                   </th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">
-                    Category
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    CATEGORY
                   </th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden sm:table-cell">
-                    Date
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase hidden sm:table-cell">
+                    DESCRIPTION
                   </th>
-                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground">
-                    Amount
+                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    AMOUNT
                   </th>
-                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground">
-                    Actions
+                  <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
+                    ACTIONS
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {expenses.map((e, i) => (
+                {filtered.map((e, i) => (
                   <tr
                     key={String(e.id)}
                     className="border-b border-border last:border-0 hover:bg-muted/20"
                     data-ocid={`expenses.item.${i + 1}`}
                   >
-                    <td className="px-4 py-3 font-medium">{e.description}</td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${catColor(e.category)}`}
-                      >
-                        {e.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
+                    <td className="px-4 py-3 text-muted-foreground">
                       {formatDate(e.date)}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium">
+                    <td className="px-4 py-3">{catBadge(e.category)}</td>
+                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
+                      {e.description}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-red-600">
                       {formatINR(e.amount)}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(e)}
-                          data-ocid={`expenses.edit_button.${i + 1}`}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(e.id)}
-                          disabled={deleting === e.id}
-                          data-ocid={`expenses.delete_button.${i + 1}`}
-                        >
-                          {deleting === e.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
-                          )}
-                        </Button>
-                      </div>
+                    <td className="px-4 py-3 text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        disabled={deleting === e.id}
+                        onClick={() => handleDelete(e.id)}
+                        data-ocid={`expenses.delete_button.${i + 1}`}
+                      >
+                        {deleting === e.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -277,60 +272,61 @@ export default function ExpensesPage() {
         </div>
       )}
 
+      {/* Add Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md" data-ocid="expenses.dialog">
+        <DialogContent data-ocid="expenses.dialog">
           <DialogHeader>
-            <DialogTitle>
-              {editing ? "Edit Expense" : "Add Expense"}
-            </DialogTitle>
+            <DialogTitle>Add Expense</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div>
-              <Label>Description</Label>
-              <Input
-                className="mt-1"
-                value={form.description}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, description: e.target.value }))
-                }
-                data-ocid="expenses.input"
-              />
-            </div>
             <div>
               <Label>Category</Label>
               <Select
                 value={form.category}
                 onValueChange={(v) =>
-                  setForm((p) => ({ ...p, category: v as ExpenseCategory }))
+                  setForm((prev) => ({
+                    ...prev,
+                    category: v as ExpenseCategory,
+                  }))
                 }
               >
                 <SelectTrigger className="mt-1" data-ocid="expenses.select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ExpenseCategory.labour}>Labour</SelectItem>
-                  <SelectItem value={ExpenseCategory.electricity}>
-                    Electricity
-                  </SelectItem>
-                  <SelectItem value={ExpenseCategory.rent}>Rent</SelectItem>
-                  <SelectItem value={ExpenseCategory.transport}>
-                    Transport
-                  </SelectItem>
-                  <SelectItem value={ExpenseCategory.other}>Other</SelectItem>
+                  {Object.entries(catLabel).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>
+                      {v}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Amount (&#8377;)</Label>
+              <Label>Description</Label>
+              <Input
+                className="mt-1"
+                placeholder="e.g. Monthly electricity bill"
+                value={form.description}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, description: e.target.value }))
+                }
+                data-ocid="expenses.input"
+              />
+            </div>
+            <div>
+              <Label>Amount (₹)</Label>
               <Input
                 className="mt-1"
                 type="number"
                 min="0"
                 step="0.01"
+                placeholder="0.00"
                 value={form.amountRupees}
                 onChange={(e) =>
-                  setForm((p) => ({ ...p, amountRupees: e.target.value }))
+                  setForm((prev) => ({ ...prev, amountRupees: e.target.value }))
                 }
+                data-ocid="expenses.input"
               />
             </div>
             <div>
@@ -340,7 +336,7 @@ export default function ExpensesPage() {
                 type="date"
                 value={form.date}
                 onChange={(e) =>
-                  setForm((p) => ({ ...p, date: e.target.value }))
+                  setForm((prev) => ({ ...prev, date: e.target.value }))
                 }
               />
             </div>
@@ -358,12 +354,12 @@ export default function ExpensesPage() {
               style={{ backgroundColor: "#B8924A" }}
               onClick={handleSave}
               disabled={saving}
-              data-ocid="expenses.save_button"
+              data-ocid="expenses.submit_button"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-1" />
               ) : null}
-              {editing ? "Update" : "Add"} Expense
+              Add Expense
             </Button>
           </DialogFooter>
         </DialogContent>
