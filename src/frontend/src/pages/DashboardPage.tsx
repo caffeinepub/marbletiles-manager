@@ -73,11 +73,19 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [actor, isFetching]);
 
-  const totalRevenue = payments.reduce((s, p) => s + p.amount, 0n);
+  // Revenue = total of all sales (grandTotal)
+  const totalRevenue = sales.reduce((s, sale) => s + sale.grandTotal, 0n);
+  // Collected = total payments received
+  const totalCollected = payments.reduce((s, p) => s + p.amount, 0n);
+  // Outstanding dues = revenue - collected
+  const outstandingDues =
+    totalRevenue > totalCollected ? totalRevenue - totalCollected : 0n;
+  // Expenses
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
+  // Profit = collected - expenses
   const profit =
-    totalRevenue > totalExpenses ? totalRevenue - totalExpenses : 0n;
-  const outstandingDues = customers.reduce((s, c) => s + c.outstandingDue, 0n);
+    totalCollected > totalExpenses ? totalCollected - totalExpenses : 0n;
+
   const lowStockItems = products.filter(
     (p) => p.currentStock <= p.minStockAlert && p.minStockAlert > 0n,
   );
@@ -86,7 +94,7 @@ export default function DashboardPage() {
     .sort((a, b) => Number(b.createdAt - a.createdAt))
     .slice(0, 5);
 
-  // Monthly chart — last 6 months
+  // Monthly chart — last 6 months based on sales grandTotal
   const now = new Date();
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
@@ -102,8 +110,18 @@ export default function DashboardPage() {
     return { month: MONTHS[mn], revenue: rev };
   });
 
+  // Payment collected per customer for top customers
+  const custPurchases = (id: bigint) =>
+    sales
+      .filter((s) => s.customerId === id)
+      .reduce((sum, s) => sum + s.grandTotal, 0n);
+
   const custName = (id: bigint) =>
     customers.find((c) => c.id === id)?.name ?? `#${String(id)}`;
+
+  // Paid per sale
+  const paidForSale = (sId: bigint) =>
+    payments.filter((p) => p.saleId === sId).reduce((s, p) => s + p.amount, 0n);
 
   if (loading) {
     return (
@@ -126,7 +144,7 @@ export default function DashboardPage() {
           {
             title: "Total Revenue",
             value: formatINR(totalRevenue),
-            sub: `${sales.length} invoices`,
+            sub: `Collected: ${formatINR(totalCollected)}`,
             icon: <TrendingUp className="w-5 h-5" />,
             color: "#B8924A",
           },
@@ -140,9 +158,9 @@ export default function DashboardPage() {
           {
             title: "Outstanding Dues",
             value: formatINR(outstandingDues),
-            sub: "Pending from customers",
+            sub: `${sales.filter((s) => s.paymentStatus !== "paid").length} unpaid invoices`,
             icon: <Clock className="w-5 h-5" />,
-            color: "#f59e0b",
+            color: outstandingDues > 0n ? "#f59e0b" : "#10b981",
           },
           {
             title: "Low Stock Items",
@@ -270,7 +288,10 @@ export default function DashboardPage() {
                       Date
                     </th>
                     <th className="text-right pb-2 font-medium text-muted-foreground text-xs uppercase">
-                      Amount
+                      Total
+                    </th>
+                    <th className="text-right pb-2 font-medium text-muted-foreground text-xs uppercase hidden md:table-cell">
+                      Paid
                     </th>
                     <th className="text-right pb-2 font-medium text-muted-foreground text-xs uppercase">
                       Status
@@ -278,34 +299,40 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentSales.map((s, i) => (
-                    <tr
-                      key={String(s.id)}
-                      className="border-b border-border last:border-0"
-                      data-ocid={`dashboard.row.${i + 1}`}
-                    >
-                      <td
-                        className="py-2.5 font-medium"
-                        style={{ color: "#B8924A" }}
+                  {recentSales.map((s, i) => {
+                    const paid = paidForSale(s.id);
+                    return (
+                      <tr
+                        key={String(s.id)}
+                        className="border-b border-border last:border-0"
+                        data-ocid={`dashboard.row.${i + 1}`}
                       >
-                        {s.invoiceNumber}
-                      </td>
-                      <td className="py-2.5">{custName(s.customerId)}</td>
-                      <td className="py-2.5 text-muted-foreground hidden sm:table-cell">
-                        {formatDate(s.createdAt)}
-                      </td>
-                      <td className="py-2.5 text-right font-semibold">
-                        {formatINR(s.grandTotal)}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${statusColor(s.paymentStatus)}`}
+                        <td
+                          className="py-2.5 font-medium"
+                          style={{ color: "#B8924A" }}
                         >
-                          {s.paymentStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                          {s.invoiceNumber}
+                        </td>
+                        <td className="py-2.5">{custName(s.customerId)}</td>
+                        <td className="py-2.5 text-muted-foreground hidden sm:table-cell">
+                          {formatDate(s.createdAt)}
+                        </td>
+                        <td className="py-2.5 text-right font-semibold">
+                          {formatINR(s.grandTotal)}
+                        </td>
+                        <td className="py-2.5 text-right text-emerald-600 hidden md:table-cell">
+                          {formatINR(paid)}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${statusColor(s.paymentStatus)}`}
+                          >
+                            {s.paymentStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -329,7 +356,8 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               {[...customers]
-                .sort((a, b) => Number(b.totalPurchases - a.totalPurchases))
+                .map((c) => ({ ...c, totalCalc: custPurchases(c.id) }))
+                .sort((a, b) => Number(b.totalCalc - a.totalCalc))
                 .slice(0, 5)
                 .map((c, i) => (
                   <div
@@ -357,7 +385,7 @@ export default function DashboardPage() {
                       className="text-sm font-semibold"
                       style={{ color: "#B8924A" }}
                     >
-                      {formatINR(c.totalPurchases)}
+                      {formatINR(c.totalCalc)}
                     </span>
                   </div>
                 ))}

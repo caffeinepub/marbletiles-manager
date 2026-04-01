@@ -128,6 +128,10 @@ export interface backendInterface {
     deleteExpense(id: ExpenseId): Promise<void>;
     deleteGSTRate(name: string): Promise<void>;
     deleteProductCategory(category: string): Promise<void>;
+    deleteProduct(name: string): Promise<void>;
+    deleteCustomer(id: CustomerId): Promise<void>;
+    deleteSale(id: SaleId): Promise<void>;
+    deletePayment(id: PaymentId): Promise<void>;
     getAllCustomers(): Promise<Array<Customer>>;
     getAllExpenses(): Promise<Array<Expense>>;
     getAllGSTRates(): Promise<Array<[string, GSTRate]>>;
@@ -153,4 +157,5 @@ export interface backendInterface {
     updateProduct(name: string, product: Product): Promise<void>;
     updateSale(id: SaleId, sale: Sale): Promise<void>;
     verifyUserPassword(password: string): Promise<boolean>;
+    _initializeAccessControlWithSecret(token: string): Promise<void>;
 }

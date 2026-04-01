@@ -110,7 +110,7 @@ export default function SalesPage() {
   const [paymentMethod, setPaymentMethod] = useState<string>(PaymentMode.cash);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<FormItem[]>([
-    { productId: "", quantity: "1", unitPrice: "0", gstRateName: "" },
+    { productId: "", quantity: "1", unitPrice: "0", gstRateName: "0" },
   ]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is intentional
@@ -150,7 +150,7 @@ export default function SalesPage() {
   const addItem = () =>
     setItems((prev) => [
       ...prev,
-      { productId: "", quantity: "1", unitPrice: "0", gstRateName: "" },
+      { productId: "", quantity: "1", unitPrice: "0", gstRateName: "0" },
     ]);
   const removeItem = (idx: number) =>
     setItems((prev) => prev.filter((_, i) => i !== idx));
@@ -216,7 +216,7 @@ export default function SalesPage() {
     setPaymentMethod(PaymentMode.cash);
     setNotes("");
     setItems([
-      { productId: "", quantity: "1", unitPrice: "0", gstRateName: "" },
+      { productId: "", quantity: "1", unitPrice: "0", gstRateName: "0" },
     ]);
   };
 
@@ -246,7 +246,7 @@ export default function SalesPage() {
       else if (paidAmt > 0n) status = SaleStatus.partial;
 
       const invoiceNumber = generateInvoiceNumber(sales.length);
-      const newSale: Sale = {
+      const newSale = {
         id: 0n,
         invoiceNumber,
         customerId: BigInt(customerId),
@@ -260,10 +260,10 @@ export default function SalesPage() {
         createdBy: Principal.anonymous(),
         createdAt: 0n,
       };
-      const saleId = await actor.addSale(newSale);
+      const saleId = await actor.addSale(newSale as Sale);
 
       if (paidAmt > 0n) {
-        const payment: Payment = {
+        const payment = {
           id: 0n,
           saleId,
           amount: paidAmt,
@@ -271,15 +271,18 @@ export default function SalesPage() {
           date: 0n,
           notes,
         };
-        await actor.addPayment(payment);
+        await actor.addPayment(payment as Payment);
       }
 
       toast.success(`Invoice ${invoiceNumber} created!`);
       setOpen(false);
       resetForm();
       reload();
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      console.error("Invoice creation error:", err);
+      toast.error(
+        `Invoice failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       setSaving(false);
     }
@@ -889,7 +892,7 @@ export default function SalesPage() {
                   GST %
                 </Label>
                 <Select
-                  value={items[0]?.gstRateName ?? ""}
+                  value={items[0]?.gstRateName || "0"}
                   onValueChange={(v) => {
                     setItems((prev) =>
                       prev.map((it) => ({ ...it, gstRateName: v })),
@@ -900,7 +903,7 @@ export default function SalesPage() {
                     <SelectValue placeholder="0%" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">0%</SelectItem>
+                    <SelectItem value="0">0%</SelectItem>
                     {gstRates.map((r) => (
                       <SelectItem key={r.name} value={r.name}>
                         {String(r.percentage)}%

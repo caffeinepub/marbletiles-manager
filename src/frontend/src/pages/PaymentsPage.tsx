@@ -1,5 +1,14 @@
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -8,12 +17,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Banknote, CreditCard, Search, Smartphone, Wallet } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Banknote,
+  CreditCard,
+  Loader2,
+  Plus,
+  Search,
+  Smartphone,
+  Wallet,
+} from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { Customer, Payment, Sale } from "../backend";
 import { PaymentMode } from "../backend";
 import { useActor } from "../hooks/useActor";
-import { formatDate, formatINR } from "../lib/formatting";
+import { formatDate, formatINR, rupeesToPaise } from "../lib/formatting";
 
 const modeLabel = (m: string) => {
   const map: Record<string, string> = {
@@ -49,7 +68,18 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modeFilter, setModeFilter] = useState("all");
+  const [refreshKey, setRefreshKey] = useState(0);
 
+  // Add payment modal
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selCustomerId, setSelCustomerId] = useState("");
+  const [selSaleId, setSelSaleId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [mode, setMode] = useState<string>(PaymentMode.cash);
+  const [notes, setNotes] = useState("");
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey intentional
   useEffect(() => {
     if (!actor || isFetching) return;
     setLoading(true);
@@ -64,7 +94,9 @@ export default function PaymentsPage() {
         setPayments(p.sort((a, b) => Number(b.date - a.date)));
       })
       .finally(() => setLoading(false));
-  }, [actor, isFetching]);
+  }, [actor, isFetching, refreshKey]);
+
+  const reload = () => setRefreshKey((k) => k + 1);
 
   const getSale = (sId: bigint) => sales.find((s) => s.id === sId);
   const getCust = (sId: bigint) => {
@@ -72,6 +104,26 @@ export default function PaymentsPage() {
     if (!sale) return "—";
     return customers.find((c) => c.id === sale.customerId)?.name ?? "—";
   };
+
+  const paidForSale = (sId: bigint) =>
+    payments.filter((p) => p.saleId === sId).reduce((s, p) => s + p.amount, 0n);
+
+  // Sales for selected customer that are not fully paid
+  const customerSales = selCustomerId
+    ? sales.filter((s) => {
+        const custId = BigInt(selCustomerId);
+        if (s.customerId !== custId) return false;
+        const paid = paidForSale(s.id);
+        return paid < s.grandTotal; // has due
+      })
+    : [];
+
+  const selectedSale = selSaleId
+    ? sales.find((s) => String(s.id) === selSaleId)
+    : null;
+  const selectedSaleDue = selectedSale
+    ? selectedSale.grandTotal - paidForSale(selectedSale.id)
+    : 0n;
 
   const filtered = payments.filter((p) => {
     const sale = getSale(p.saleId);
@@ -88,13 +140,80 @@ export default function PaymentsPage() {
   const byMode = (m: string) =>
     payments.filter((p) => p.mode === m).reduce((s, p) => s + p.amount, 0n);
 
+  const resetForm = () => {
+    setSelCustomerId("");
+    setSelSaleId("");
+    setAmount("");
+    setMode(PaymentMode.cash);
+    setNotes("");
+  };
+
+  const handleAddPayment = async () => {
+    if (!actor) return;
+    if (!selSaleId) {
+      toast.error("Please select an invoice");
+      return;
+    }
+    const amt = rupeesToPaise(amount || "0");
+    if (amt <= 0n) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payment = {
+        id: 0n,
+        saleId: BigInt(selSaleId),
+        amount: amt,
+        mode: mode as PaymentMode,
+        date: 0n,
+        notes,
+      };
+      await actor.addPayment(payment as Payment);
+
+      // Update sale payment status
+      const sale = sales.find((s) => String(s.id) === selSaleId);
+      if (sale) {
+        const totalPaid = paidForSale(sale.id) + amt;
+        let newStatus = sale.paymentStatus;
+        if (totalPaid >= sale.grandTotal)
+          newStatus = "paid" as typeof sale.paymentStatus;
+        else if (totalPaid > 0n)
+          newStatus = "partial" as typeof sale.paymentStatus;
+        await actor.updateSale(sale.id, { ...sale, paymentStatus: newStatus });
+      }
+
+      toast.success("Payment recorded!");
+      setOpen(false);
+      resetForm();
+      reload();
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        `Failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Payments</h1>
-        <p className="text-sm text-muted-foreground">
-          All payment records and collections
-        </p>
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Payments</h1>
+          <p className="text-sm text-muted-foreground">
+            All payment records and collections
+          </p>
+        </div>
+        <Button
+          className="text-white flex-shrink-0"
+          style={{ backgroundColor: "#B8924A" }}
+          onClick={() => setOpen(true)}
+          data-ocid="payments.primary_button"
+        >
+          <Plus className="w-4 h-4 mr-1" /> Record Payment
+        </Button>
       </div>
 
       {/* Summary Cards */}
@@ -249,6 +368,171 @@ export default function PaymentsPage() {
           </div>
         </div>
       )}
+
+      {/* Record Payment Dialog */}
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (!v) resetForm();
+        }}
+      >
+        <DialogContent className="max-w-md" data-ocid="payments.dialog">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">
+              Record Payment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Customer */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide">
+                CUSTOMER *
+              </Label>
+              <Select
+                value={selCustomerId}
+                onValueChange={(v) => {
+                  setSelCustomerId(v);
+                  setSelSaleId("");
+                }}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="— Select Customer —" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((c) => (
+                    <SelectItem key={String(c.id)} value={String(c.id)}>
+                      {c.name}
+                      {c.phone ? ` — ${c.phone}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Invoice */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide">
+                INVOICE *
+              </Label>
+              <Select
+                value={selSaleId}
+                onValueChange={(v) => {
+                  setSelSaleId(v);
+                  // Auto-fill due amount
+                  const sale = sales.find((s) => String(s.id) === v);
+                  if (sale) {
+                    const due = sale.grandTotal - paidForSale(sale.id);
+                    setAmount((Number(due) / 100).toFixed(2));
+                  }
+                }}
+                disabled={!selCustomerId}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue
+                    placeholder={
+                      !selCustomerId
+                        ? "Select customer first"
+                        : customerSales.length === 0
+                          ? "No pending invoices"
+                          : "— Select Invoice —"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {customerSales.map((s) => {
+                    const due = s.grandTotal - paidForSale(s.id);
+                    return (
+                      <SelectItem key={String(s.id)} value={String(s.id)}>
+                        {s.invoiceNumber} — Due: {formatINR(due)}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              {selectedSale && selectedSaleDue > 0n && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Outstanding due: {formatINR(selectedSaleDue)}
+                </p>
+              )}
+            </div>
+
+            {/* Amount */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide">
+                AMOUNT (₹) *
+              </Label>
+              <Input
+                className="mt-1.5"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                data-ocid="payments.input"
+              />
+            </div>
+
+            {/* Method */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide">
+                PAYMENT METHOD
+              </Label>
+              <Select value={mode} onValueChange={setMode}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PaymentMode.cash}>Cash</SelectItem>
+                  <SelectItem value={PaymentMode.upi}>UPI</SelectItem>
+                  <SelectItem value={PaymentMode.cheque}>Cheque</SelectItem>
+                  <SelectItem value={PaymentMode.bank}>Bank</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide">
+                NOTES
+              </Label>
+              <Textarea
+                className="mt-1.5"
+                rows={2}
+                placeholder="Optional note..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false);
+                resetForm();
+              }}
+              data-ocid="payments.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              className="text-white"
+              style={{ backgroundColor: "#B8924A" }}
+              onClick={handleAddPayment}
+              disabled={saving}
+              data-ocid="payments.submit_button"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : null}
+              Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
