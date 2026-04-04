@@ -1,41 +1,50 @@
 # Radha Rani Marble House
 
 ## Current State
-- App has Login (username/password), Dashboard, Inventory, Sales, Payments, Customers, Expenses, Reports, Finance, Settings pages
-- Admin Panel exists in routing but should remain hidden
-- Backend has full CRUD for Products, Customers, Sales, Payments, Expenses, GST rates
-- Sales page has basic invoice list and create dialog but needs UI overhaul
-- Invoice detail view lacks printable layout and payment recording
-- Dashboard, Payments, Customers, Expenses, Reports pages need full functional implementation
+- Full-stack app with Motoko backend and React frontend
+- Modules: Dashboard, Inventory, Sales & Billing, Payments, Customers, Expenses, Reports, Finance, Settings
+- Login: traditional username/password (radharanim123 / radha123456)
+- Admin Panel: off/hidden
+- Known bugs: Dashboard shows no data, Invoice creation errors, Payments customer selection broken
+- Data persistence: stable var implemented in backend
+- Assets: gold RR logo at src/frontend/public/assets/file-019d4401-ef71-762a-a4e0-e28a94ec321e.jpg
 
 ## Requested Changes (Diff)
 
 ### Add
-- Sales & Billing page: invoice list matching uploaded image (search bar, All Status filter dropdown, table with INVOICE/CUSTOMER/DATE/TOTAL/PAID/DUE/STATUS/ACTIONS columns, gold invoice number links, PAID/PARTIAL/UNPAID status badges, View button)
-- Create Invoice modal: matching uploaded image (Customer dropdown, Products with + Add Item, Qty, Price fields, GST% dropdown, Discount field, Transport field, Subtotal/Total summary, Amount Paid, Payment Method, Notes, Cancel/Create Invoice buttons)
-- Invoice Detail page/view: matching uploaded image (Back button, Print button, company header "RADHA RANI MARBLE HOUSE", BILL TO section, items table with #/PRODUCT/QTY/UNIT PRICE/DISCOUNT/AMOUNT, totals section with Subtotal/Transport/Total/Paid, Notes, Payment History table with DATE/AMOUNT/METHOD/REFERENCE)
-- Dashboard: Revenue card, Profit card, Outstanding Dues card, Low Stock Alerts, Monthly sales chart, recent transactions
-- Customers: CRM table with add/edit/delete, customer ledger/history view
-- Payments: All payment records table, collection by payment method summary
-- Expenses: Add expense form, category tracking (labour/rent/transport/salary/electricity/other), totals
-- Reports: P&L summary, monthly trend chart, inventory valuation, outstanding dues
+- PDF invoice download/print button on Invoice Detail
+- WhatsApp payment reminder button (opens WhatsApp with pre-filled message)
+- Reports page: charts for monthly sales, profit trends, inventory valuation
+- Expense tracker: category-wise breakdown (labour, rent, transport, salary, electricity, misc)
+- Customer ledger: detailed view showing all invoices and payments per customer
+- Data export: CSV/JSON download for all modules
+- PWA support: manifest.json, service worker, installable on mobile home screen
+- PWA icons: use gold RR monogram logo
+- Dashboard: fix revenue, profit, outstanding dues calculation from actual sales/payments/expenses data
+- Finance page: income vs expense summary, profit/loss
 
 ### Modify
-- Sales page completely redesigned to match uploaded images
-- Invoice numbers formatted as INV-YYYYMM-XXXX
-- Invoice detail shows payment history from payments table
-- All pages use consistent warm beige/gold color scheme (background #f5f0e8, gold #B8924A)
+- Backend: fix all data query functions to return correct aggregated data for dashboard
+- Backend: ensure payments correctly update sale paymentStatus and outstandingDue
+- Backend: add getExpensesByCategory, getDashboardStats, exportAllData functions
+- Backend: add PDF-ready invoice data function
+- Payments page: fix customer selection dropdown - load customers properly, show pending invoices on customer select
+- Dashboard: fix KPI cards (Revenue, Profit, Outstanding Dues, Low Stock count) to pull from real data
+- Sales page: fix invoice creation - ensure all select fields have non-empty values
+- Reports page: add recharts bar/line charts for monthly trends
 
 ### Remove
-- Admin Panel link from sidebar (keep hidden)
-- SetupProfilePage and PasswordSetupPage routes if redundant
+- Nothing removed
 
 ## Implementation Plan
-1. Rebuild SalesPage to match uploaded images exactly: list view with search+filter, Create Invoice modal, Invoice Detail full-page view with print
-2. Fix Dashboard with real data from backend (revenue, profit, dues, stock alerts, monthly chart)
-3. Rebuild CustomersPage with CRM table, add/edit/delete modals, ledger view
-4. Rebuild PaymentsPage with all payment records and method summary
-5. Rebuild ExpensesPage with expense form, categories, totals
-6. Rebuild ReportsPage with P&L, charts, inventory valuation
-7. Keep Login, Inventory, Finance, Settings pages as-is (they work)
-8. Admin Panel stays hidden from sidebar
+1. Rewrite backend main.mo with complete, correct implementations of all query/update functions including getDashboardStats, getExpensesByCategory, exportAllData, recordPaymentForSale
+2. Ensure all stable vars are correct and data persists
+3. Rebuild frontend pages:
+   a. DashboardPage: use getDashboardStats for real KPIs + monthly chart
+   b. SalesPage: fix invoice form (no empty Select values), add PDF print, WhatsApp reminder
+   c. PaymentsPage: fix customer dropdown load + pending invoice selection
+   d. ExpensesPage: add category-wise pie chart and summary
+   e. ReportsPage: add recharts charts (monthly sales bar, profit line, inventory value)
+   f. FinancePage: income vs expense summary cards
+4. Add PWA: vite-plugin-pwa with manifest, icons, service worker
+5. Add CSV export buttons on Reports page

@@ -4,6 +4,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Download, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
   Line,
@@ -61,347 +63,303 @@ export default function ReportsPage() {
       .finally(() => setLoading(false));
   }, [actor, isFetching]);
 
-  const totalRevenue = payments.reduce((s, p) => s + p.amount, 0n);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
-  const netProfit =
-    totalRevenue > totalExpenses ? totalRevenue - totalExpenses : 0n;
-
   const now = new Date();
+
+  // Monthly sales & profit (last 6 months)
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-    const mn = d.getMonth();
+    const mIdx = d.getMonth();
     const yr = d.getFullYear();
-    const rev = sales
-      .filter((s) => {
-        if (s.createdAt === 0n) return false;
-        const sd = new Date(Number(s.createdAt) / 1_000_000);
-        return sd.getMonth() === mn && sd.getFullYear() === yr;
-      })
-      .reduce((sum, s) => sum + Number(s.grandTotal) / 100, 0);
-    const exp = expenses
-      .filter((e) => {
-        if (e.date === 0n) return false;
-        const ed = new Date(Number(e.date) / 1_000_000);
-        return ed.getMonth() === mn && ed.getFullYear() === yr;
-      })
-      .reduce((sum, e) => sum + Number(e.amount) / 100, 0);
-    return { month: MONTHS[mn], sales: rev, expenses: exp };
+    const monthSales = sales.filter((s) => {
+      const sd = new Date(Number(s.createdAt) / 1_000_000);
+      return sd.getMonth() === mIdx && sd.getFullYear() === yr;
+    });
+    const monthPayments = payments.filter((p) => {
+      const pd = new Date(Number(p.date) / 1_000_000);
+      return pd.getMonth() === mIdx && pd.getFullYear() === yr;
+    });
+    const monthExpenses = expenses.filter((e) => {
+      const ed = new Date(Number(e.date) / 1_000_000);
+      return ed.getMonth() === mIdx && ed.getFullYear() === yr;
+    });
+    const revenue =
+      Number(monthSales.reduce((a, s) => a + s.grandTotal, 0n)) / 100;
+    const collected =
+      Number(monthPayments.reduce((a, p) => a + p.amount, 0n)) / 100;
+    const exp = Number(monthExpenses.reduce((a, e) => a + e.amount, 0n)) / 100;
+    const profit = collected - exp;
+    return {
+      month: MONTHS[mIdx],
+      revenue,
+      profit,
+    };
   });
 
-  const outstandingSales = sales.filter(
-    (s) => s.paymentStatus === "unpaid" || s.paymentStatus === "partial",
-  );
-
-  const getCustName = (id: bigint) =>
-    customers.find((c) => c.id === id)?.name ?? `#${String(id)}`;
-
-  const inventoryValuation = products.map((p) => ({
-    name: p.name,
-    category: p.category,
-    stock: Number(p.currentStock),
-    price: p.basePrice,
-    value: p.basePrice * p.currentStock,
-  }));
-
-  const totalInventoryValue = inventoryValuation.reduce(
-    (s, p) => s + p.value,
+  // Inventory valuation
+  const inventoryValue = products.reduce(
+    (s, p) => s + p.basePrice * p.currentStock,
     0n,
   );
 
-  const handleExportJSON = () => {
-    const data = {
-      sales: sales.map((s) => ({
-        ...s,
-        id: String(s.id),
-        grandTotal: String(s.grandTotal),
-      })),
-      expenses: expenses.map((e) => ({
-        ...e,
-        id: String(e.id),
-        amount: String(e.amount),
-      })),
-      payments: payments.map((p) => ({
-        ...p,
-        id: String(p.id),
-        amount: String(p.amount),
-      })),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
+  // Outstanding customers
+  const outstandingCustomers = customers
+    .filter((c) => c.outstandingDue > 0n)
+    .sort((a, b) => (b.outstandingDue > a.outstandingDue ? 1 : -1));
+
+  const totalRevenue = sales.reduce((s, sale) => s + sale.grandTotal, 0n);
+  const totalCollected = payments.reduce((s, p) => s + p.amount, 0n);
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
+  const netProfit = totalCollected - totalExpenses;
+
+  const exportCSV = () => {
+    const rows = [
+      ["Invoice #", "Customer", "Date", "Amount", "Status"],
+      ...sales.map((s) => {
+        const cust = customers.find((c) => c.id === s.customerId);
+        return [
+          s.invoiceNumber,
+          cust?.name ?? "Unknown",
+          new Date(Number(s.createdAt) / 1_000_000).toLocaleDateString("en-IN"),
+          (Number(s.grandTotal) / 100).toFixed(2),
+          s.paymentStatus,
+        ];
+      }),
+    ];
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `radharani-report-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `sales-report-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   if (loading) {
     return (
-      <div className="space-y-4" data-ocid="reports.loading_state">
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-64 rounded-xl" />
+      <div className="p-6 space-y-4" data-ocid="reports.loading_state">
+        {["r1", "r2", "r3"].map((k) => (
+          <Skeleton key={k} className="h-32 w-full rounded-xl" />
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="p-4 md:p-6 space-y-6" data-ocid="reports.page">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">
-            Reports & Analytics
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Business performance overview
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.print()}
-            data-ocid="reports.secondary_button"
-          >
-            <Download className="w-4 h-4 mr-1" /> Print
-          </Button>
-          <Button
-            size="sm"
-            className="text-white"
-            style={{ backgroundColor: "#B8924A" }}
-            onClick={handleExportJSON}
-            data-ocid="reports.primary_button"
-          >
-            <Download className="w-4 h-4 mr-1" /> Export JSON
-          </Button>
-        </div>
+        <h1 className="text-xl font-bold text-gray-900">Reports & Analytics</h1>
+        <Button
+          variant="outline"
+          onClick={exportCSV}
+          className="border-[#B8924A] text-[#B8924A] hover:bg-amber-50"
+          data-ocid="reports.export_button"
+        >
+          <Download className="w-4 h-4 mr-1" /> Export CSV
+        </Button>
       </div>
 
-      {/* P&L Summary */}
-      <div className="grid grid-cols-3 gap-4" data-ocid="reports.section">
-        {[
-          {
-            label: "Total Revenue",
-            value: formatINR(totalRevenue),
-            color: "#10b981",
-            icon: <TrendingUp className="w-5 h-5" />,
-          },
-          {
-            label: "Total Expenses",
-            value: formatINR(totalExpenses),
-            color: "#ef4444",
-            icon: <TrendingDown className="w-5 h-5" />,
-          },
-          {
-            label: "Net Profit",
-            value: formatINR(netProfit),
-            color: "#B8924A",
-            icon: <TrendingUp className="w-5 h-5" />,
-          },
-        ].map((kpi, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static config list
-          <Card key={i} className="bg-white shadow-card border-0 rounded-xl">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  className="text-white w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ backgroundColor: kpi.color }}
-                >
-                  {kpi.icon}
-                </span>
-                <p className="text-sm text-muted-foreground">{kpi.label}</p>
-              </div>
-              <p className="text-xl font-bold" style={{ color: kpi.color }}>
-                {kpi.value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Monthly Trend Chart */}
-      <Card className="bg-white rounded-xl shadow-card border-0">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Monthly Sales vs Expenses (Last 6 Months)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart
-              data={monthlyData}
-              margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+      {/* KPI Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="border-l-4 border-l-[#B8924A]">
+          <CardContent className="p-4">
+            <div className="text-xs font-semibold text-[#B8924A] uppercase mb-1">
+              Total Revenue
+            </div>
+            <p className="text-xl font-bold">{formatINR(totalRevenue)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="p-4">
+            <div className="text-xs font-semibold text-emerald-600 uppercase mb-1">
+              Collected
+            </div>
+            <p className="text-xl font-bold">{formatINR(totalCollected)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-red-500">
+          <CardContent className="p-4">
+            <div className="text-xs font-semibold text-red-500 uppercase mb-1">
+              Total Expenses
+            </div>
+            <p className="text-xl font-bold">{formatINR(totalExpenses)}</p>
+          </CardContent>
+        </Card>
+        <Card
+          className={`border-l-4 ${netProfit >= 0n ? "border-l-emerald-600" : "border-l-red-600"}`}
+        >
+          <CardContent className="p-4">
+            <div
+              className={`text-xs font-semibold uppercase mb-1 flex items-center gap-1 ${netProfit >= 0n ? "text-emerald-600" : "text-red-600"}`}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0ede8" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-              <Tooltip formatter={(v) => [`₹${v}`, ""]} />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="sales"
-                stroke="#B8924A"
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                name="Sales"
-              />
-              <Line
-                type="monotone"
-                dataKey="expenses"
-                stroke="#ef4444"
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                name="Expenses"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Outstanding Dues */}
-      <Card className="bg-white rounded-xl shadow-card border-0">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Outstanding Dues
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {outstandingSales.length === 0 ? (
+              {netProfit >= 0n ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
+              )}
+              Net Profit
+            </div>
             <p
-              className="text-sm text-muted-foreground text-center py-6"
-              data-ocid="reports.empty_state"
+              className={`text-xl font-bold ${netProfit >= 0n ? "text-emerald-700" : "text-red-700"}`}
             >
-              No outstanding dues 🎉
+              {formatINR(netProfit < 0n ? -netProfit : netProfit)}
             </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Invoice
-                    </th>
-                    <th className="text-left py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Customer
-                    </th>
-                    <th className="text-left py-2 font-medium text-muted-foreground text-xs uppercase hidden sm:table-cell">
-                      Date
-                    </th>
-                    <th className="text-right py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Total
-                    </th>
-                    <th className="text-right py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {outstandingSales.map((s, i) => (
-                    <tr
-                      key={String(s.id)}
-                      className="border-b border-border last:border-0"
-                      data-ocid={`reports.row.${i + 1}`}
-                    >
-                      <td
-                        className="py-2.5 font-medium"
-                        style={{ color: "#B8924A" }}
-                      >
-                        {s.invoiceNumber}
-                      </td>
-                      <td className="py-2.5">{getCustName(s.customerId)}</td>
-                      <td className="py-2.5 text-muted-foreground hidden sm:table-cell">
-                        {formatDate(s.createdAt)}
-                      </td>
-                      <td className="py-2.5 text-right font-semibold">
-                        {formatINR(s.grandTotal)}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                            s.paymentStatus === "partial"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {s.paymentStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Inventory Valuation */}
-      <Card className="bg-white rounded-xl shadow-card border-0">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Inventory Valuation
-            <span className="ml-2 text-muted-foreground font-normal">
-              Total: {formatINR(totalInventoryValue)}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {inventoryValuation.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No products in inventory
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Product
-                    </th>
-                    <th className="text-left py-2 font-medium text-muted-foreground text-xs uppercase hidden sm:table-cell">
-                      Category
-                    </th>
-                    <th className="text-right py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Stock
-                    </th>
-                    <th className="text-right py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Price
-                    </th>
-                    <th className="text-right py-2 font-medium text-muted-foreground text-xs uppercase">
-                      Value
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventoryValuation.map((p, i) => (
-                    <tr
-                      key={p.name}
-                      className="border-b border-border last:border-0"
-                      data-ocid={`reports.item.${i + 1}`}
-                    >
-                      <td className="py-2.5 font-medium">{p.name}</td>
-                      <td className="py-2.5 text-muted-foreground capitalize hidden sm:table-cell">
-                        {p.category}
-                      </td>
-                      <td className="py-2.5 text-right">{p.stock}</td>
-                      <td className="py-2.5 text-right">
-                        {formatINR(p.price)}
-                      </td>
-                      <td
-                        className="py-2.5 text-right font-semibold"
-                        style={{ color: "#B8924A" }}
-                      >
-                        {formatINR(p.value)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {/* Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Monthly Sales BarChart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-gray-700">
+              Monthly Revenue (Last 6 Months)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  formatter={(v: number) => [
+                    `₹${v.toLocaleString("en-IN")}`,
+                    "Revenue",
+                  ]}
+                />
+                <Bar dataKey="revenue" fill="#B8924A" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Monthly Profit LineChart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-gray-700">
+              Monthly Profit Trend
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  formatter={(v: number) => [
+                    `₹${v.toLocaleString("en-IN")}`,
+                    "Profit",
+                  ]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Inventory Valuation + Outstanding */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-gray-700">
+              Inventory Valuation
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-6">
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+                Total Stock Value
+              </p>
+              <p className="text-3xl font-bold text-[#B8924A]">
+                {formatINR(inventoryValue)}
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                {products.length} products ·{" "}
+                {products.reduce((s, p) => s + p.currentStock, 0n).toString()}{" "}
+                units
+              </p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {products
+                .filter((p) => p.currentStock > 0n)
+                .sort((a, b) =>
+                  b.basePrice * b.currentStock > a.basePrice * a.currentStock
+                    ? 1
+                    : -1,
+                )
+                .slice(0, 8)
+                .map((p, i) => (
+                  <div
+                    key={String(p.id)}
+                    className="flex items-center justify-between text-sm"
+                    data-ocid={`reports.item.${i + 1}`}
+                  >
+                    <span className="text-gray-700">{p.name}</span>
+                    <span className="font-semibold">
+                      {formatINR(p.basePrice * p.currentStock)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-gray-700">
+              Outstanding Dues
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {outstandingCustomers.length === 0 ? (
+              <div
+                className="text-center py-8 text-gray-400 text-sm"
+                data-ocid="reports.empty_state"
+              >
+                No outstanding dues 🎉
+              </div>
+            ) : (
+              <div
+                className="space-y-2 max-h-56 overflow-y-auto"
+                data-ocid="reports.table"
+              >
+                {outstandingCustomers.map((c, i) => (
+                  <div
+                    key={String(c.id)}
+                    className="flex items-center justify-between p-2 rounded border border-red-100 bg-red-50"
+                    data-ocid={`reports.row.${i + 1}`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{c.name}</p>
+                      <p className="text-xs text-gray-500">{c.phone}</p>
+                    </div>
+                    <span className="font-bold text-red-600 text-sm">
+                      {formatINR(c.outstandingDue)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

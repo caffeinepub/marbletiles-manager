@@ -3,8 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle,
-  ArrowUpRight,
-  Clock,
+  IndianRupee,
   Package,
   TrendingUp,
   Users,
@@ -23,12 +22,6 @@ import type { Customer, Expense, Payment, Product, Sale } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR } from "../lib/formatting";
 
-const statusColor = (s: string) => {
-  if (s === "paid") return "bg-emerald-100 text-emerald-700";
-  if (s === "unpaid") return "bg-red-100 text-red-700";
-  return "bg-amber-100 text-amber-700";
-};
-
 const MONTHS = [
   "Jan",
   "Feb",
@@ -43,6 +36,12 @@ const MONTHS = [
   "Nov",
   "Dec",
 ];
+
+const statusColor = (s: string) => {
+  if (s === "paid") return "bg-emerald-100 text-emerald-700";
+  if (s === "unpaid") return "bg-red-100 text-red-700";
+  return "bg-amber-100 text-amber-700";
+};
 
 export default function DashboardPage() {
   const { actor, isFetching } = useActor();
@@ -73,133 +72,112 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [actor, isFetching]);
 
-  // Revenue = total of all sales (grandTotal)
   const totalRevenue = sales.reduce((s, sale) => s + sale.grandTotal, 0n);
-  // Collected = total payments received
   const totalCollected = payments.reduce((s, p) => s + p.amount, 0n);
-  // Outstanding dues = revenue - collected
-  const outstandingDues =
-    totalRevenue > totalCollected ? totalRevenue - totalCollected : 0n;
-  // Expenses
+  const outstandingDues = totalRevenue - totalCollected;
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
-  // Profit = collected - expenses
-  const profit =
-    totalCollected > totalExpenses ? totalCollected - totalExpenses : 0n;
-
+  const totalProfit = totalCollected - totalExpenses;
   const lowStockItems = products.filter(
-    (p) => p.currentStock <= p.minStockAlert && p.minStockAlert > 0n,
+    (p) => p.currentStock <= p.minStockAlert,
   );
 
-  const recentSales = [...sales]
-    .sort((a, b) => Number(b.createdAt - a.createdAt))
-    .slice(0, 5);
-
-  // Monthly chart — last 6 months based on sales grandTotal
+  // Monthly chart data (last 6 months)
   const now = new Date();
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-    const mn = d.getMonth();
+    const mIdx = d.getMonth();
     const yr = d.getFullYear();
-    const rev = sales
-      .filter((s) => {
-        if (s.createdAt === 0n) return false;
-        const sd = new Date(Number(s.createdAt) / 1_000_000);
-        return sd.getMonth() === mn && sd.getFullYear() === yr;
-      })
-      .reduce((sum, s) => sum + Number(s.grandTotal) / 100, 0);
-    return { month: MONTHS[mn], revenue: rev };
+    const monthSales = sales.filter((s) => {
+      const sd = new Date(Number(s.createdAt) / 1_000_000);
+      return sd.getMonth() === mIdx && sd.getFullYear() === yr;
+    });
+    const rev = monthSales.reduce((acc, s) => acc + s.grandTotal, 0n);
+    return {
+      month: MONTHS[mIdx],
+      revenue: Number(rev) / 100,
+    };
   });
 
-  // Payment collected per customer for top customers
-  const custPurchases = (id: bigint) =>
-    sales
-      .filter((s) => s.customerId === id)
-      .reduce((sum, s) => sum + s.grandTotal, 0n);
+  const recentSales = [...sales]
+    .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1))
+    .slice(0, 5);
 
-  const custName = (id: bigint) =>
-    customers.find((c) => c.id === id)?.name ?? `#${String(id)}`;
-
-  // Paid per sale
-  const paidForSale = (sId: bigint) =>
-    payments.filter((p) => p.saleId === sId).reduce((s, p) => s + p.amount, 0n);
+  const customerMap = new Map(customers.map((c) => [c.id, c]));
 
   if (loading) {
     return (
-      <div className="space-y-5" data-ocid="dashboard.loading_state">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-28 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
+      <div className="p-6 space-y-4" data-ocid="dashboard.loading_state">
+        {["d1", "d2", "d3", "d4"].map((k) => (
+          <Skeleton key={k} className="h-24 w-full rounded-xl" />
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="space-y-5" data-ocid="dashboard.section">
+    <div className="p-4 md:p-6 space-y-6" data-ocid="dashboard.page">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            title: "Total Revenue",
-            value: formatINR(totalRevenue),
-            sub: `Collected: ${formatINR(totalCollected)}`,
-            icon: <TrendingUp className="w-5 h-5" />,
-            color: "#B8924A",
-          },
-          {
-            title: "Net Profit",
-            value: formatINR(profit),
-            sub: `Expenses: ${formatINR(totalExpenses)}`,
-            icon: <ArrowUpRight className="w-5 h-5" />,
-            color: "#10b981",
-          },
-          {
-            title: "Outstanding Dues",
-            value: formatINR(outstandingDues),
-            sub: `${sales.filter((s) => s.paymentStatus !== "paid").length} unpaid invoices`,
-            icon: <Clock className="w-5 h-5" />,
-            color: outstandingDues > 0n ? "#f59e0b" : "#10b981",
-          },
-          {
-            title: "Low Stock Items",
-            value: String(lowStockItems.length),
-            sub: `${products.length} total products`,
-            icon: <AlertTriangle className="w-5 h-5" />,
-            color: lowStockItems.length > 0 ? "#ef4444" : "#10b981",
-          },
-        ].map((kpi) => (
-          <Card
-            key={kpi.title}
-            className="bg-white rounded-xl shadow-card border-0"
-            data-ocid="dashboard.card"
-          >
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium text-muted-foreground">
-                  {kpi.title}
-                </p>
-                <span
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white"
-                  style={{ backgroundColor: kpi.color }}
-                >
-                  {kpi.icon}
-                </span>
-              </div>
-              <p className="text-xl font-bold text-foreground">{kpi.value}</p>
-              <p className="text-xs text-muted-foreground mt-1">{kpi.sub}</p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="border-l-4 border-l-[#B8924A]">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-[#B8924A] mb-1">
+              <IndianRupee className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                Total Revenue
+              </span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">
+              {formatINR(totalRevenue)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-red-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-red-500 mb-1">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                Outstanding Dues
+              </span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">
+              {formatINR(outstandingDues < 0n ? 0n : outstandingDues)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-emerald-500 mb-1">
+              <TrendingUp className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                Total Profit
+              </span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">
+              {formatINR(totalProfit < 0n ? 0n : totalProfit)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-amber-500 mb-1">
+              <Package className="w-4 h-4" />
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                Low Stock
+              </span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">
+              {lowStockItems.length}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Monthly Chart */}
-        <Card className="lg:col-span-2 bg-white rounded-xl shadow-card border-0">
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Monthly Revenue Chart */}
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" style={{ color: "#B8924A" }} />
+            <CardTitle className="text-sm font-semibold text-gray-700">
               Monthly Revenue (Last 6 Months)
             </CardTitle>
           </CardHeader>
@@ -209,44 +187,52 @@ export default function DashboardPage() {
                 data={monthlyData}
                 margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0ede8" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-                <Tooltip formatter={(v) => [`₹${v}`, "Revenue"]} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  formatter={(v: number) => [
+                    `₹${(v).toLocaleString("en-IN")}`,
+                    "Revenue",
+                  ]}
+                />
                 <Bar dataKey="revenue" fill="#B8924A" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Low Stock */}
-        <Card className="bg-white rounded-xl shadow-card border-0">
+        {/* Low Stock Alerts */}
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
               Low Stock Alerts
             </CardTitle>
           </CardHeader>
           <CardContent>
             {lowStockItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                All stock healthy ✓
-              </p>
+              <div
+                className="flex items-center justify-center h-32 text-gray-400 text-sm"
+                data-ocid="dashboard.empty_state"
+              >
+                All stocks are sufficient
+              </div>
             ) : (
-              <div className="space-y-2">
-                {lowStockItems.slice(0, 6).map((p, i) => (
+              <div className="space-y-2 max-h-44 overflow-y-auto">
+                {lowStockItems.map((p, i) => (
                   <div
                     key={String(p.id)}
-                    className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                    className="flex items-center justify-between p-2 rounded-lg bg-amber-50 border border-amber-100"
                     data-ocid={`dashboard.item.${i + 1}`}
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{p.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {p.category}
-                      </p>
-                    </div>
-                    <Badge variant="destructive" className="ml-2 flex-shrink-0">
+                    <span className="text-sm font-medium text-gray-800">
+                      {p.name}
+                    </span>
+                    <Badge className="bg-amber-500 text-white text-xs">
                       {String(p.currentStock)} left
                     </Badge>
                   </div>
@@ -257,142 +243,110 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Transactions */}
-      <Card className="bg-white rounded-xl shadow-card border-0">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Users className="w-4 h-4" style={{ color: "#B8924A" }} />
-            Recent Transactions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentSales.length === 0 ? (
-            <p
-              className="text-sm text-muted-foreground text-center py-6"
-              data-ocid="dashboard.empty_state"
-            >
-              No transactions yet
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left pb-2 font-medium text-muted-foreground text-xs uppercase">
-                      Invoice
-                    </th>
-                    <th className="text-left pb-2 font-medium text-muted-foreground text-xs uppercase">
-                      Customer
-                    </th>
-                    <th className="text-left pb-2 font-medium text-muted-foreground text-xs uppercase hidden sm:table-cell">
-                      Date
-                    </th>
-                    <th className="text-right pb-2 font-medium text-muted-foreground text-xs uppercase">
-                      Total
-                    </th>
-                    <th className="text-right pb-2 font-medium text-muted-foreground text-xs uppercase hidden md:table-cell">
-                      Paid
-                    </th>
-                    <th className="text-right pb-2 font-medium text-muted-foreground text-xs uppercase">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentSales.map((s, i) => {
-                    const paid = paidForSale(s.id);
-                    return (
-                      <tr
-                        key={String(s.id)}
-                        className="border-b border-border last:border-0"
-                        data-ocid={`dashboard.row.${i + 1}`}
-                      >
-                        <td
-                          className="py-2.5 font-medium"
-                          style={{ color: "#B8924A" }}
+      {/* Recent Sales + Customers Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Recent Sales */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-gray-700">
+              Recent Sales
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentSales.length === 0 ? (
+              <div
+                className="text-center text-gray-400 text-sm py-8"
+                data-ocid="dashboard.empty_state"
+              >
+                No sales yet
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentSales.map((sale, i) => {
+                  const cust = customerMap.get(sale.customerId);
+                  return (
+                    <div
+                      key={String(sale.id)}
+                      className="flex items-center justify-between p-2 rounded-lg border border-gray-100 hover:bg-gray-50"
+                      data-ocid={`dashboard.item.${i + 1}`}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-[#B8924A]">
+                          {sale.invoiceNumber}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {cust?.name ?? "Unknown"} ·{" "}
+                          {formatDate(sale.createdAt)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold">
+                          {formatINR(sale.grandTotal)}
+                        </p>
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${statusColor(sale.paymentStatus)}`}
                         >
-                          {s.invoiceNumber}
-                        </td>
-                        <td className="py-2.5">{custName(s.customerId)}</td>
-                        <td className="py-2.5 text-muted-foreground hidden sm:table-cell">
-                          {formatDate(s.createdAt)}
-                        </td>
-                        <td className="py-2.5 text-right font-semibold">
-                          {formatINR(s.grandTotal)}
-                        </td>
-                        <td className="py-2.5 text-right text-emerald-600 hidden md:table-cell">
-                          {formatINR(paid)}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${statusColor(s.paymentStatus)}`}
-                          >
-                            {s.paymentStatus}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                          {sale.paymentStatus}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Top Customers */}
-      <Card className="bg-white rounded-xl shadow-card border-0">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Package className="w-4 h-4" style={{ color: "#B8924A" }} />
-            Top Customers by Purchase
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {customers.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No customers yet
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {[...customers]
-                .map((c) => ({ ...c, totalCalc: custPurchases(c.id) }))
-                .sort((a, b) => Number(b.totalCalc - a.totalCalc))
-                .slice(0, 5)
-                .map((c, i) => (
-                  <div
-                    key={String(c.id)}
-                    className="flex items-center justify-between py-2 border-b border-border last:border-0"
-                    data-ocid={`dashboard.panel.${i + 1}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                        style={{ backgroundColor: "#B8924A" }}
-                      >
-                        {i + 1}
-                      </span>
+        {/* Top Customers */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#B8924A]" />
+              Top Customers
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {customers.length === 0 ? (
+              <div
+                className="text-center text-gray-400 text-sm py-8"
+                data-ocid="dashboard.empty_state"
+              >
+                No customers yet
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[...customers]
+                  .sort((a, b) =>
+                    b.totalPurchases > a.totalPurchases ? 1 : -1,
+                  )
+                  .slice(0, 5)
+                  .map((c, i) => (
+                    <div
+                      key={String(c.id)}
+                      className="flex items-center justify-between p-2 rounded-lg border border-gray-100"
+                      data-ocid={`dashboard.item.${i + 1}`}
+                    >
                       <div>
                         <p className="text-sm font-medium">{c.name}</p>
-                        {c.phone && (
-                          <p className="text-xs text-muted-foreground">
-                            {c.phone}
+                        <p className="text-xs text-gray-500">{c.phone}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold">
+                          {formatINR(c.totalPurchases)}
+                        </p>
+                        {c.outstandingDue > 0n && (
+                          <p className="text-xs text-red-500">
+                            Due: {formatINR(c.outstandingDue)}
                           </p>
                         )}
                       </div>
                     </div>
-                    <span
-                      className="text-sm font-semibold"
-                      style={{ color: "#B8924A" }}
-                    >
-                      {formatINR(c.totalCalc)}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

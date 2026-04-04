@@ -79,9 +79,10 @@ export default function PaymentsPage() {
   const [mode, setMode] = useState<string>(PaymentMode.cash);
   const [notes, setNotes] = useState("");
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey intentional
   useEffect(() => {
     if (!actor || isFetching) return;
+    // refreshKey is used to trigger re-fetch after mutations
+    void refreshKey;
     setLoading(true);
     Promise.all([
       actor.getAllSales(),
@@ -91,418 +92,392 @@ export default function PaymentsPage() {
       .then(([s, c, p]) => {
         setSales(s);
         setCustomers(c);
-        setPayments(p.sort((a, b) => Number(b.date - a.date)));
+        setPayments(p);
       })
       .finally(() => setLoading(false));
   }, [actor, isFetching, refreshKey]);
 
-  const reload = () => setRefreshKey((k) => k + 1);
-
-  const getSale = (sId: bigint) => sales.find((s) => s.id === sId);
-  const getCust = (sId: bigint) => {
-    const sale = getSale(sId);
-    if (!sale) return "—";
-    return customers.find((c) => c.id === sale.customerId)?.name ?? "—";
-  };
-
-  const paidForSale = (sId: bigint) =>
-    payments.filter((p) => p.saleId === sId).reduce((s, p) => s + p.amount, 0n);
-
-  // Sales for selected customer that are not fully paid
-  const customerSales = selCustomerId
-    ? sales.filter((s) => {
-        const custId = BigInt(selCustomerId);
-        if (s.customerId !== custId) return false;
-        const paid = paidForSale(s.id);
-        return paid < s.grandTotal; // has due
-      })
+  // Pending sales for selected customer
+  const pendingSales = selCustomerId
+    ? sales.filter(
+        (s) =>
+          String(s.customerId) === selCustomerId && s.paymentStatus !== "paid",
+      )
     : [];
 
-  const selectedSale = selSaleId
-    ? sales.find((s) => String(s.id) === selSaleId)
-    : null;
-  const selectedSaleDue = selectedSale
-    ? selectedSale.grandTotal - paidForSale(selectedSale.id)
-    : 0n;
-
-  const filtered = payments.filter((p) => {
-    const sale = getSale(p.saleId);
-    const cust = sale ? customers.find((c) => c.id === sale.customerId) : null;
-    const matchSearch =
-      !search ||
-      sale?.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      cust?.name.toLowerCase().includes(search.toLowerCase());
-    const matchMode = modeFilter === "all" || p.mode === modeFilter;
-    return matchSearch && matchMode;
-  });
-
-  const totalCollected = payments.reduce((s, p) => s + p.amount, 0n);
-  const byMode = (m: string) =>
-    payments.filter((p) => p.mode === m).reduce((s, p) => s + p.amount, 0n);
-
-  const resetForm = () => {
-    setSelCustomerId("");
-    setSelSaleId("");
-    setAmount("");
-    setMode(PaymentMode.cash);
-    setNotes("");
+  // Compute due for a sale
+  const getDue = (saleId: bigint) => {
+    const sale = sales.find((s) => s.id === saleId);
+    if (!sale) return 0n;
+    const collected = payments
+      .filter((p) => p.saleId === saleId)
+      .reduce((acc, p) => acc + p.amount, 0n);
+    return sale.grandTotal - collected;
   };
 
-  const handleAddPayment = async () => {
+  const openModal = () => {
+    const firstCustomer = customers[0];
+    const firstId = firstCustomer ? String(firstCustomer.id) : "";
+    setSelCustomerId(firstId);
+    const pending = firstId
+      ? sales.filter(
+          (s) => String(s.customerId) === firstId && s.paymentStatus !== "paid",
+        )
+      : [];
+    const firstSale = pending[0];
+    setSelSaleId(firstSale ? String(firstSale.id) : "");
+    if (firstSale) {
+      const due = getDue(firstSale.id);
+      setAmount(String(Number(due) / 100));
+    } else {
+      setAmount("");
+    }
+    setMode(PaymentMode.cash);
+    setNotes("");
+    setOpen(true);
+  };
+
+  const handleCustomerChange = (custId: string) => {
+    setSelCustomerId(custId);
+    const pending = sales.filter(
+      (s) => String(s.customerId) === custId && s.paymentStatus !== "paid",
+    );
+    const firstSale = pending[0];
+    setSelSaleId(firstSale ? String(firstSale.id) : "");
+    if (firstSale) {
+      const due = getDue(firstSale.id);
+      setAmount(String(Number(due) / 100));
+    } else {
+      setAmount("");
+    }
+  };
+
+  const handleSaleChange = (sId: string) => {
+    setSelSaleId(sId);
+    if (sId) {
+      const due = getDue(BigInt(sId));
+      setAmount(String(Number(due) / 100));
+    } else {
+      setAmount("");
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!actor) return;
     if (!selSaleId) {
-      toast.error("Please select an invoice");
+      toast.error("Select an invoice");
       return;
     }
-    const amt = rupeesToPaise(amount || "0");
-    if (amt <= 0n) {
+    if (!amount || Number(amount) <= 0) {
       toast.error("Enter a valid amount");
       return;
     }
+
     setSaving(true);
     try {
-      const payment = {
+      const payment: Payment = {
         id: 0n,
         saleId: BigInt(selSaleId),
-        amount: amt,
-        mode: mode as PaymentMode,
-        date: 0n,
+        amount: rupeesToPaise(amount),
+        mode: mode as any,
+        date: BigInt(Date.now()) * 1_000_000n,
         notes,
       };
-      await actor.addPayment(payment as Payment);
-
-      // Update sale payment status
-      const sale = sales.find((s) => String(s.id) === selSaleId);
-      if (sale) {
-        const totalPaid = paidForSale(sale.id) + amt;
-        let newStatus = sale.paymentStatus;
-        if (totalPaid >= sale.grandTotal)
-          newStatus = "paid" as typeof sale.paymentStatus;
-        else if (totalPaid > 0n)
-          newStatus = "partial" as typeof sale.paymentStatus;
-        await actor.updateSale(sale.id, { ...sale, paymentStatus: newStatus });
-      }
-
-      toast.success("Payment recorded!");
+      await actor.addPayment(payment);
+      toast.success("Payment recorded successfully!");
       setOpen(false);
-      resetForm();
-      reload();
-    } catch (err) {
-      console.error(err);
+      setRefreshKey((k) => k + 1);
+    } catch (err: any) {
       toast.error(
-        `Failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to record payment: ${err?.message ?? "Unknown error"}`,
       );
     } finally {
       setSaving(false);
     }
   };
 
+  const customerMap = new Map(customers.map((c) => [c.id, c]));
+  const saleMap = new Map(sales.map((s) => [s.id, s]));
+
+  const filteredPayments = payments
+    .filter((p) => {
+      const sale = saleMap.get(p.saleId);
+      const cust = sale ? customerMap.get(sale.customerId) : undefined;
+      const matchSearch =
+        !search ||
+        (sale?.invoiceNumber ?? "")
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
+        (cust?.name ?? "").toLowerCase().includes(search.toLowerCase());
+      const matchMode = modeFilter === "all" || p.mode === modeFilter;
+      return matchSearch && matchMode;
+    })
+    .sort((a, b) => (b.date > a.date ? 1 : -1));
+
+  // Summary cards
+  const totalCash = payments
+    .filter((p) => p.mode === "cash")
+    .reduce((s, p) => s + p.amount, 0n);
+  const totalUpi = payments
+    .filter((p) => p.mode === "upi")
+    .reduce((s, p) => s + p.amount, 0n);
+  const totalCheque = payments
+    .filter((p) => p.mode === "cheque")
+    .reduce((s, p) => s + p.amount, 0n);
+  const totalBank = payments
+    .filter((p) => p.mode === "bank")
+    .reduce((s, p) => s + p.amount, 0n);
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-4" data-ocid="payments.loading_state">
+        {["p1", "p2", "p3"].map((k) => (
+          <Skeleton key={k} className="h-20 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Payments</h1>
-          <p className="text-sm text-muted-foreground">
-            All payment records and collections
-          </p>
-        </div>
+    <div className="p-4 md:p-6 space-y-4" data-ocid="payments.page">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Payments</h1>
         <Button
-          className="text-white flex-shrink-0"
-          style={{ backgroundColor: "#B8924A" }}
-          onClick={() => setOpen(true)}
-          data-ocid="payments.primary_button"
+          className="bg-[#B8924A] hover:bg-[#9a7a3e] text-white"
+          onClick={openModal}
+          data-ocid="payments.open_modal_button"
         >
           <Plus className="w-4 h-4 mr-1" /> Record Payment
         </Button>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            label: "Total Collected",
-            value: formatINR(totalCollected),
-            icon: <Wallet className="w-4 h-4" />,
-            color: "#B8924A",
-          },
-          {
-            label: "Cash",
-            value: formatINR(byMode(PaymentMode.cash)),
-            icon: <Banknote className="w-4 h-4" />,
-            color: "#10b981",
-          },
-          {
-            label: "UPI",
-            value: formatINR(byMode(PaymentMode.upi)),
-            icon: <Smartphone className="w-4 h-4" />,
-            color: "#3b82f6",
-          },
-          {
-            label: "Cheque / Bank",
-            value: formatINR(
-              byMode(PaymentMode.cheque) + byMode(PaymentMode.bank),
-            ),
-            icon: <CreditCard className="w-4 h-4" />,
-            color: "#8b5cf6",
-          },
-        ].map((c, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static config list
-          <Card key={i} className="bg-white shadow-card border-0 rounded-xl">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-                <span
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
-                  style={{ backgroundColor: c.color }}
-                >
-                  {c.icon}
-                </span>
-              </div>
-              <p className="text-lg font-bold" style={{ color: c.color }}>
-                {c.value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="border-l-4 border-l-green-500">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Wallet className="w-4 h-4 text-green-500" />
+              <span className="text-xs font-semibold text-green-700">Cash</span>
+            </div>
+            <p className="font-bold text-gray-900">{formatINR(totalCash)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Smartphone className="w-4 h-4 text-blue-500" />
+              <span className="text-xs font-semibold text-blue-700">UPI</span>
+            </div>
+            <p className="font-bold text-gray-900">{formatINR(totalUpi)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CreditCard className="w-4 h-4 text-purple-500" />
+              <span className="text-xs font-semibold text-purple-700">
+                Cheque
+              </span>
+            </div>
+            <p className="font-bold text-gray-900">{formatINR(totalCheque)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-indigo-500">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Banknote className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs font-semibold text-indigo-700">
+                Bank
+              </span>
+            </div>
+            <p className="font-bold text-gray-900">{formatINR(totalBank)}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
-            className="pl-9 bg-white"
             placeholder="Search invoice or customer..."
+            className="pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             data-ocid="payments.search_input"
           />
         </div>
         <Select value={modeFilter} onValueChange={setModeFilter}>
-          <SelectTrigger className="w-40 bg-white" data-ocid="payments.select">
-            <SelectValue placeholder="All Methods" />
+          <SelectTrigger className="w-32" data-ocid="payments.mode_select">
+            <SelectValue placeholder="Mode" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Methods</SelectItem>
-            <SelectItem value={PaymentMode.cash}>Cash</SelectItem>
-            <SelectItem value={PaymentMode.upi}>UPI</SelectItem>
-            <SelectItem value={PaymentMode.cheque}>Cheque</SelectItem>
-            <SelectItem value={PaymentMode.bank}>Bank</SelectItem>
+            <SelectItem value="all">All Modes</SelectItem>
+            <SelectItem value="cash">Cash</SelectItem>
+            <SelectItem value="upi">UPI</SelectItem>
+            <SelectItem value="cheque">Cheque</SelectItem>
+            <SelectItem value="bank">Bank</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className="space-y-2" data-ocid="payments.loading_state">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-14 rounded-xl" />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
+      {/* Payments Table */}
+      {filteredPayments.length === 0 ? (
         <div
-          className="bg-white rounded-xl p-12 text-center shadow-card"
+          className="text-center py-16 text-gray-400"
           data-ocid="payments.empty_state"
         >
-          <p className="text-muted-foreground">No payment records found.</p>
+          No payments recorded yet
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border bg-muted/30">
-                <tr>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
-                    DATE
-                  </th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
-                    INVOICE
-                  </th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase hidden sm:table-cell">
-                    CUSTOMER
-                  </th>
-                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
-                    AMOUNT
-                  </th>
-                  <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs uppercase">
-                    METHOD
-                  </th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase hidden md:table-cell">
-                    NOTES
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p, i) => (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="w-full" data-ocid="payments.table">
+            <thead>
+              <tr className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3 text-left font-semibold">Date</th>
+                <th className="px-4 py-3 text-left font-semibold">Invoice</th>
+                <th className="px-4 py-3 text-left font-semibold">Customer</th>
+                <th className="px-4 py-3 text-center font-semibold">Mode</th>
+                <th className="px-4 py-3 text-right font-semibold">Amount</th>
+                <th className="px-4 py-3 text-left font-semibold">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPayments.map((p, i) => {
+                const sale = saleMap.get(p.saleId);
+                const cust = sale
+                  ? customerMap.get(sale.customerId)
+                  : undefined;
+                return (
                   <tr
                     key={String(p.id)}
-                    className="border-b border-border last:border-0 hover:bg-muted/20"
-                    data-ocid={`payments.item.${i + 1}`}
+                    className="border-t border-gray-100 hover:bg-gray-50"
+                    data-ocid={`payments.row.${i + 1}`}
                   >
-                    <td className="px-4 py-3 text-muted-foreground">
+                    <td className="px-4 py-3 text-sm text-gray-600">
                       {formatDate(p.date)}
                     </td>
-                    <td
-                      className="px-4 py-3 font-medium"
-                      style={{ color: "#B8924A" }}
-                    >
-                      {getSale(p.saleId)?.invoiceNumber ??
-                        `#${String(p.saleId)}`}
+                    <td className="px-4 py-3">
+                      <span className="font-bold text-[#B8924A] text-sm">
+                        {sale?.invoiceNumber ?? "-"}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                      {getCust(p.saleId)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-emerald-600">
-                      {formatINR(p.amount)}
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {cust?.name ?? "-"}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {modeBadge(p.mode)}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                      {p.notes || "—"}
+                    <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                      {formatINR(p.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {p.notes || "-"}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* Record Payment Dialog */}
-      <Dialog
-        open={open}
-        onOpenChange={(v) => {
-          setOpen(v);
-          if (!v) resetForm();
-        }}
-      >
+      {/* Record Payment Modal */}
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md" data-ocid="payments.dialog">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">
-              Record Payment
-            </DialogTitle>
+            <DialogTitle className="text-[#B8924A]">Record Payment</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4">
             {/* Customer */}
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide">
-                CUSTOMER *
-              </Label>
-              <Select
-                value={selCustomerId}
-                onValueChange={(v) => {
-                  setSelCustomerId(v);
-                  setSelSaleId("");
-                }}
-              >
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue placeholder="— Select Customer —" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((c) => (
-                    <SelectItem key={String(c.id)} value={String(c.id)}>
-                      {c.name}
-                      {c.phone ? ` — ${c.phone}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-semibold">Customer *</Label>
+              {customers.length === 0 ? (
+                <p className="text-sm text-red-500 mt-1">
+                  No customers available.
+                </p>
+              ) : (
+                <Select
+                  value={selCustomerId}
+                  onValueChange={handleCustomerChange}
+                >
+                  <SelectTrigger data-ocid="payments.customer_select">
+                    <SelectValue placeholder="Select customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((c) => (
+                      <SelectItem key={String(c.id)} value={String(c.id)}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
-            {/* Invoice */}
+            {/* Invoice / Sale */}
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide">
-                INVOICE *
-              </Label>
-              <Select
-                value={selSaleId}
-                onValueChange={(v) => {
-                  setSelSaleId(v);
-                  // Auto-fill due amount
-                  const sale = sales.find((s) => String(s.id) === v);
-                  if (sale) {
-                    const due = sale.grandTotal - paidForSale(sale.id);
-                    setAmount((Number(due) / 100).toFixed(2));
-                  }
-                }}
-                disabled={!selCustomerId}
-              >
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue
-                    placeholder={
-                      !selCustomerId
-                        ? "Select customer first"
-                        : customerSales.length === 0
-                          ? "No pending invoices"
-                          : "— Select Invoice —"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {customerSales.map((s) => {
-                    const due = s.grandTotal - paidForSale(s.id);
-                    return (
-                      <SelectItem key={String(s.id)} value={String(s.id)}>
-                        {s.invoiceNumber} — Due: {formatINR(due)}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              {selectedSale && selectedSaleDue > 0n && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Outstanding due: {formatINR(selectedSaleDue)}
+              <Label className="text-sm font-semibold">Invoice *</Label>
+              {pendingSales.length === 0 ? (
+                <p className="text-sm text-amber-600 mt-1">
+                  No pending invoices for this customer.
                 </p>
+              ) : (
+                <Select value={selSaleId} onValueChange={handleSaleChange}>
+                  <SelectTrigger data-ocid="payments.invoice_select">
+                    <SelectValue placeholder="Select invoice" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pendingSales.map((s) => (
+                      <SelectItem key={String(s.id)} value={String(s.id)}>
+                        {s.invoiceNumber} — Due: {formatINR(getDue(s.id))}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
             </div>
 
             {/* Amount */}
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide">
-                AMOUNT (₹) *
-              </Label>
+              <Label className="text-sm font-semibold">Amount (₹) *</Label>
               <Input
-                className="mt-1.5"
                 type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
+                placeholder="Enter amount"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                data-ocid="payments.input"
+                data-ocid="payments.amount_input"
               />
             </div>
 
-            {/* Method */}
+            {/* Mode */}
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide">
-                PAYMENT METHOD
-              </Label>
+              <Label className="text-sm font-semibold">Payment Mode *</Label>
               <Select value={mode} onValueChange={setMode}>
-                <SelectTrigger className="mt-1.5">
+                <SelectTrigger data-ocid="payments.mode_input">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={PaymentMode.cash}>Cash</SelectItem>
                   <SelectItem value={PaymentMode.upi}>UPI</SelectItem>
                   <SelectItem value={PaymentMode.cheque}>Cheque</SelectItem>
-                  <SelectItem value={PaymentMode.bank}>Bank</SelectItem>
+                  <SelectItem value={PaymentMode.bank}>
+                    Bank Transfer
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Notes */}
             <div>
-              <Label className="text-xs font-semibold uppercase tracking-wide">
-                NOTES
-              </Label>
+              <Label className="text-sm font-semibold">Notes</Label>
               <Textarea
-                className="mt-1.5"
-                rows={2}
-                placeholder="Optional note..."
+                placeholder="Optional notes..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                data-ocid="payments.notes_textarea"
               />
             </div>
           </div>
@@ -510,19 +485,15 @@ export default function PaymentsPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setOpen(false);
-                resetForm();
-              }}
+              onClick={() => setOpen(false)}
               data-ocid="payments.cancel_button"
             >
               Cancel
             </Button>
             <Button
-              className="text-white"
-              style={{ backgroundColor: "#B8924A" }}
-              onClick={handleAddPayment}
-              disabled={saving}
+              className="bg-[#B8924A] hover:bg-[#9a7a3e] text-white"
+              onClick={handleSubmit}
+              disabled={saving || !selSaleId || pendingSales.length === 0}
               data-ocid="payments.submit_button"
             >
               {saving ? (
