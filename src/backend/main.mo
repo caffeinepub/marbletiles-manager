@@ -13,15 +13,25 @@ actor {
   type SaleItem = { productId : ProductId; quantity : Nat; unitPrice : Nat; gstRate : GSTRate; gstAmount : Nat };
   type SaleStatus = { #paid; #partial; #unpaid };
   type SaleId = Nat;
-  // Sale type kept identical to previous deployed version (no new fields to preserve compatibility)
   type Sale = { id : SaleId; customerId : CustomerId; invoiceNumber : Text; items : [SaleItem]; subtotal : Nat; totalGST : Nat; transportCharge : Nat; discount : Nat; grandTotal : Nat; paymentStatus : SaleStatus; createdAt : Time.Time; createdBy : Principal };
   type PaymentId = Nat;
   type PaymentMode = { #cash; #upi; #cheque; #bank };
-  // Payment type kept identical to previous deployed version (no new fields to preserve compatibility)
   type Payment = { id : PaymentId; saleId : SaleId; amount : Nat; mode : PaymentMode; date : Time.Time; notes : Text };
   type ExpenseCategory = { #labour; #electricity; #transport; #rent; #other };
   type ExpenseId = Nat;
   type Expense = { id : ExpenseId; category : ExpenseCategory; description : Text; amount : Nat; date : Time.Time; recordedBy : Principal };
+
+  public type CompanySettings = {
+    name : Text;
+    gstin : Text;
+    phone : Text;
+    address : Text;
+    city : Text;
+    bankName : Text;
+    accountNumber : Text;
+    ifscCode : Text;
+    branch : Text;
+  };
 
   // Keep these stable vars from previous versions to avoid compatibility errors
   type UserProfileStored = { name : Text; role : Text };
@@ -48,6 +58,43 @@ actor {
   stable var payments = Map.empty<Nat, Payment>();
   stable var nextPaymentId = 1;
   stable var customCategoriesMap = Map.empty<Text, Text>();
+
+  // Company settings stable storage
+  stable var companySettingsName : Text = "RADHA RANI MARBLE HOUSE";
+  stable var companySettingsGstin : Text = "";
+  stable var companySettingsPhone : Text = "";
+  stable var companySettingsAddress : Text = "";
+  stable var companySettingsCity : Text = "";
+  stable var companySettingsBankName : Text = "";
+  stable var companySettingsAccountNumber : Text = "";
+  stable var companySettingsIfscCode : Text = "";
+  stable var companySettingsBranch : Text = "";
+
+  public query func getCompanySettings() : async CompanySettings {
+    {
+      name = companySettingsName;
+      gstin = companySettingsGstin;
+      phone = companySettingsPhone;
+      address = companySettingsAddress;
+      city = companySettingsCity;
+      bankName = companySettingsBankName;
+      accountNumber = companySettingsAccountNumber;
+      ifscCode = companySettingsIfscCode;
+      branch = companySettingsBranch;
+    }
+  };
+
+  public shared func saveCompanySettings(s : CompanySettings) : async () {
+    companySettingsName := s.name;
+    companySettingsGstin := s.gstin;
+    companySettingsPhone := s.phone;
+    companySettingsAddress := s.address;
+    companySettingsCity := s.city;
+    companySettingsBankName := s.bankName;
+    companySettingsAccountNumber := s.accountNumber;
+    companySettingsIfscCode := s.ifscCode;
+    companySettingsBranch := s.branch;
+  };
 
   public query func getAllGSTRates() : async [(Text, GSTRate)] { gstRates.toArray() };
   public shared func addGSTRate(rate : GSTRate) : async () { gstRates.add(rate.name, rate) };

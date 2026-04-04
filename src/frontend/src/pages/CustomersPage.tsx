@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -11,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Principal } from "@icp-sdk/core/principal";
-import { Edit2, Loader2, Plus, Search, Users, X } from "lucide-react";
+import { Edit2, Loader2, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { Customer, Sale } from "../backend";
@@ -23,6 +33,7 @@ const emptyForm = () => ({
   email: "",
   phone: "",
   address: "",
+  outstandingBalance: "",
 });
 
 export default function CustomersPage() {
@@ -37,6 +48,8 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [ledgerCustomer, setLedgerCustomer] = useState<Customer | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is intentional
   useEffect(() => {
@@ -72,6 +85,7 @@ export default function CustomersPage() {
       email: c.email,
       phone: c.phone,
       address: c.address,
+      outstandingBalance: (Number(c.outstandingDue) / 100).toFixed(2),
     });
     setOpen(true);
   };
@@ -85,12 +99,16 @@ export default function CustomersPage() {
     setSaving(true);
     try {
       if (editing) {
+        const balancePaise = BigInt(
+          Math.round(Number(form.outstandingBalance || "0") * 100),
+        );
         await actor.updateCustomer(editing.id, {
           ...editing,
           name: form.name,
           email: form.email,
           phone: form.phone,
           address: form.address,
+          outstandingDue: balancePaise,
         });
         toast.success("Customer updated");
       } else {
@@ -112,6 +130,21 @@ export default function CustomersPage() {
       toast.error("Failed to save customer");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!actor || !deleteTarget) return;
+    setDeleting(true);
+    try {
+      await (actor as any).deleteCustomer(deleteTarget.id);
+      toast.success(`${deleteTarget.name} deleted`);
+      setDeleteTarget(null);
+      reload();
+    } catch {
+      toast.error("Failed to delete customer");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -280,6 +313,15 @@ export default function CustomersPage() {
                         >
                           Ledger
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => setDeleteTarget(c)}
+                          data-ocid={`customers.delete_button.${i + 1}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -322,6 +364,29 @@ export default function CustomersPage() {
                 />
               </div>
             ))}
+            {editing && (
+              <div>
+                <Label>Outstanding Balance (₹)</Label>
+                <Input
+                  className="mt-1"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.outstandingBalance}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      outstandingBalance: e.target.value,
+                    }))
+                  }
+                  data-ocid="customers.balance_input"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Manually adjust the outstanding balance for this customer.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -346,6 +411,41 @@ export default function CustomersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+      >
+        <AlertDialogContent data-ocid="customers.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <strong>{deleteTarget?.name}</strong>? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setDeleteTarget(null)}
+              data-ocid="customers.cancel_button"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDelete}
+              disabled={deleting}
+              data-ocid="customers.confirm_button"
+            >
+              {deleting ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Ledger Dialog */}
       <Dialog

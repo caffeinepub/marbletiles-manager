@@ -86,6 +86,17 @@ export interface Reports {
     topSellingProducts: Array<Product>;
     totalRevenue: bigint;
 }
+export interface CompanySettings {
+    name: string;
+    gstin: string;
+    phone: string;
+    address: string;
+    city: string;
+    bankName: string;
+    accountNumber: string;
+    ifscCode: string;
+    branch: string;
+}
 export enum ExpenseCategory {
     other = "other",
     labour = "labour",
@@ -157,5 +168,7 @@ export interface backendInterface {
     updateProduct(name: string, product: Product): Promise<void>;
     updateSale(id: SaleId, sale: Sale): Promise<void>;
     verifyUserPassword(password: string): Promise<boolean>;
+    getCompanySettings(): Promise<CompanySettings>;
+    saveCompanySettings(settings: CompanySettings): Promise<void>;
     _initializeAccessControlWithSecret(token: string): Promise<void>;
 }

@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Building2,
+  CreditCard,
   Download,
   FileText,
   Loader2,
@@ -29,6 +31,10 @@ interface CompanySettings {
   phone: string;
   address: string;
   city: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  branch: string;
 }
 
 const defaultCompany: CompanySettings = {
@@ -37,6 +43,10 @@ const defaultCompany: CompanySettings = {
   phone: "",
   address: "",
   city: "",
+  bankName: "",
+  accountNumber: "",
+  ifscCode: "",
+  branch: "",
 };
 
 export default function SettingsPage() {
@@ -110,13 +120,22 @@ export default function SettingsPage() {
     });
   }, [actor, isFetching]);
 
-  const saveCompany = () => {
+  const saveCompany = async () => {
     setSavingCompany(true);
-    localStorage.setItem(LS_COMPANY, JSON.stringify(company));
-    setTimeout(() => {
-      setSavingCompany(false);
+    try {
+      // Save to localStorage
+      localStorage.setItem(LS_COMPANY, JSON.stringify(company));
+      // Try to save to backend if methods are available
+      if (actor && (actor as any).saveCompanySettings) {
+        await (actor as any).saveCompanySettings(company);
+      }
       toast.success("Company settings saved");
-    }, 400);
+    } catch {
+      // If backend fails, localStorage save already succeeded
+      toast.success("Company settings saved locally");
+    } finally {
+      setSavingCompany(false);
+    }
   };
 
   const handleAddGst = async () => {
@@ -297,6 +316,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="company" data-ocid="settings.tab">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="company">Company</TabsTrigger>
+          <TabsTrigger value="bank">Bank Details</TabsTrigger>
           <TabsTrigger value="gst">GST Rates</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
@@ -307,7 +327,8 @@ export default function SettingsPage() {
         <TabsContent value="company" className="mt-4">
           <Card className="bg-white rounded-xl shadow-card border-0">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Building2 className="w-4 h-4" style={{ color: "#B8924A" }} />
                 Company Profile
               </CardTitle>
             </CardHeader>
@@ -342,6 +363,71 @@ export default function SettingsPage() {
                   <Loader2 className="w-4 h-4 animate-spin mr-1" />
                 )}
                 Save Company Info
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Bank Details */}
+        <TabsContent value="bank" className="mt-4">
+          <Card className="bg-white rounded-xl shadow-card border-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <CreditCard className="w-4 h-4" style={{ color: "#B8924A" }} />
+                Bank Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-lg p-3">
+                Bank details added here will appear on printed invoices in the
+                payment section.
+              </p>
+              {[
+                {
+                  label: "Bank Name",
+                  field: "bankName" as const,
+                  placeholder: "e.g. State Bank of India",
+                },
+                {
+                  label: "Account Number",
+                  field: "accountNumber" as const,
+                  placeholder: "e.g. 1234567890",
+                },
+                {
+                  label: "IFSC Code",
+                  field: "ifscCode" as const,
+                  placeholder: "e.g. SBIN0001234",
+                },
+                {
+                  label: "Branch",
+                  field: "branch" as const,
+                  placeholder: "e.g. Main Branch, Jaipur",
+                },
+              ].map(({ label, field, placeholder }) => (
+                <div key={field}>
+                  <Label className="text-xs">{label}</Label>
+                  <Input
+                    className="mt-1"
+                    placeholder={placeholder}
+                    value={company[field]}
+                    onChange={(e) =>
+                      setCompany((p) => ({ ...p, [field]: e.target.value }))
+                    }
+                    data-ocid={`settings.${field}.input`}
+                  />
+                </div>
+              ))}
+              <Button
+                className="text-white"
+                style={{ backgroundColor: "#B8924A" }}
+                onClick={saveCompany}
+                disabled={savingCompany}
+                data-ocid="settings.save_button"
+              >
+                {savingCompany && (
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                )}
+                Save Bank Details
               </Button>
             </CardContent>
           </Card>

@@ -42,6 +42,8 @@ import {
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR, rupeesToPaise } from "../lib/formatting";
 
+const LS_COMPANY = "rrm_company_settings";
+
 const statusBadge = (s: string) => {
   if (s === "paid")
     return (
@@ -92,75 +94,222 @@ function printInvoice(
   products: Product[],
   payments: Payment[],
 ) {
+  const settings = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(LS_COMPANY) || "{}");
+    } catch {
+      return {};
+    }
+  })();
+
+  const companyName = settings.name || "RADHA RANI MARBLE HOUSE";
+  const companyAddress = settings.address || "";
+  const companyCity = settings.city || "";
+  const companyPhone = settings.phone || "";
+  const companyGstin = settings.gstin || "";
+  const bankName = settings.bankName || "";
+  const accountNumber = settings.accountNumber || "";
+  const ifscCode = settings.ifscCode || "";
+  const branch = settings.branch || "";
+  const hasBankDetails = bankName || accountNumber || ifscCode || branch;
+
+  const logoUrl = `${window.location.origin}/assets/file-019d4401-ef71-762a-a4e0-e28a94ec321e.jpg`;
+  const invoiceDate = new Date(
+    Number(sale.createdAt) / 1_000_000,
+  ).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
   const itemRows = sale.items
-    .map((item) => {
+    .map((item, idx) => {
       const prod = products.find((p) => p.id === item.productId);
-      return `<tr>
-        <td style="padding:8px;border-bottom:1px solid #eee">${prod?.name ?? "Unknown"}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${String(item.quantity)}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">₹${(Number(item.unitPrice) / 100).toFixed(2)}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${item.gstRate.name} (${String(item.gstRate.percentage)}%)</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">₹${(Number(item.gstAmount) / 100).toFixed(2)}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">₹${(Number(item.unitPrice * item.quantity + item.gstAmount) / 100).toFixed(2)}</td>
+      const rowBg = idx % 2 === 0 ? "#fafafa" : "#ffffff";
+      return `<tr style="background:${rowBg}">
+        <td style="padding:10px 12px;border-bottom:1px solid #f0e9df;font-size:13px;color:#555">${idx + 1}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f0e9df;font-size:13px;font-weight:600;color:#2d2d2d">${prod?.name ?? "Unknown Product"}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f0e9df;font-size:13px;text-align:center;color:#555">${String(item.quantity)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f0e9df;font-size:13px;text-align:right;color:#555">&#8377;${(Number(item.unitPrice) / 100).toFixed(2)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f0e9df;font-size:13px;text-align:center;color:#555">${item.gstRate.name} (${(Number(item.gstRate.percentage) / 100).toFixed(1)}%)</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f0e9df;font-size:13px;text-align:right;color:#555">&#8377;${(Number(item.gstAmount) / 100).toFixed(2)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f0e9df;font-size:13px;text-align:right;font-weight:600;color:#2d2d2d">&#8377;${((Number(item.unitPrice) * Number(item.quantity) + Number(item.gstAmount)) / 100).toFixed(2)}</td>
       </tr>`;
     })
     .join("");
 
   const salePayments = payments.filter((p) => p.saleId === sale.id);
+  const paidAmount = salePayments.reduce((s, p) => s + p.amount, 0n);
+  const dueAmount = sale.grandTotal - paidAmount;
+
   const paymentRows = salePayments
     .map(
       (p) => `<tr>
-    <td style="padding:6px;border-bottom:1px solid #eee">${new Date(Number(p.date) / 1_000_000).toLocaleDateString("en-IN")}</td>
-    <td style="padding:6px;border-bottom:1px solid #eee">${modeLabel(p.mode)}</td>
-    <td style="padding:6px;border-bottom:1px solid #eee;text-align:right">₹${(Number(p.amount) / 100).toFixed(2)}</td>
-    <td style="padding:6px;border-bottom:1px solid #eee">${p.notes}</td>
-  </tr>`,
+      <td style="padding:8px 12px;border-bottom:1px solid #f0e9df;font-size:12px;color:#555">${new Date(Number(p.date) / 1_000_000).toLocaleDateString("en-IN")}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0e9df;font-size:12px;color:#555">${modeLabel(p.mode)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0e9df;font-size:12px;text-align:right;font-weight:600;color:#2d2d2d">&#8377;${(Number(p.amount) / 100).toFixed(2)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f0e9df;font-size:12px;color:#555">${p.notes || "—"}</td>
+    </tr>`,
     )
     .join("");
 
-  const html = `<!DOCTYPE html><html><head><title>Invoice ${sale.invoiceNumber}</title>
-  <style>body{font-family:Arial,sans-serif;margin:40px;color:#333} table{width:100%;border-collapse:collapse} th{background:#B8924A;color:white;padding:10px;text-align:left} .gold{color:#B8924A} .right{text-align:right}</style>
-  </head><body>
-  <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:30px">
-    <div>
-      <h1 style="margin:0;color:#B8924A;font-size:24px">RADHA RANI MARBLE HOUSE</h1>
-      <p style="margin:4px 0;color:#666;font-size:12px">Premium Marble & Tiles</p>
-    </div>
-    <div style="text-align:right">
-      <h2 style="margin:0;color:#B8924A">INVOICE</h2>
-      <p style="margin:4px 0;font-weight:bold">${sale.invoiceNumber}</p>
-      <p style="margin:4px 0;font-size:12px;color:#666">${new Date(Number(sale.createdAt) / 1_000_000).toLocaleDateString("en-IN")}</p>
-    </div>
-  </div>
-  <div style="margin-bottom:24px;padding:16px;background:#fafafa;border-radius:8px">
-    <strong>Bill To:</strong><br/>
-    <span style="font-size:16px">${customer?.name ?? "Customer"}</span><br/>
-    <span style="color:#666">${customer?.phone ?? ""}</span><br/>
-    <span style="color:#666">${customer?.address ?? ""}</span>
-  </div>
-  <table style="margin-bottom:24px">
-    <thead><tr><th>Product</th><th>Qty</th><th class="right">Unit Price</th><th>GST</th><th class="right">GST Amt</th><th class="right">Total</th></tr></thead>
-    <tbody>${itemRows}</tbody>
-  </table>
-  <div style="float:right;width:300px;margin-bottom:32px">
-    <table><tbody>
-      <tr><td>Subtotal</td><td style="text-align:right">₹${(Number(sale.subtotal) / 100).toFixed(2)}</td></tr>
-      <tr><td>Total GST</td><td style="text-align:right">₹${(Number(sale.totalGST) / 100).toFixed(2)}</td></tr>
-      <tr><td>Transport</td><td style="text-align:right">₹${(Number(sale.transportCharge) / 100).toFixed(2)}</td></tr>
-      <tr><td>Discount</td><td style="text-align:right">-₹${(Number(sale.discount) / 100).toFixed(2)}</td></tr>
-      <tr style="font-weight:bold;font-size:16px;color:#B8924A"><td>Grand Total</td><td style="text-align:right">₹${(Number(sale.grandTotal) / 100).toFixed(2)}</td></tr>
-    </tbody></table>
-  </div>
-  <div style="clear:both"></div>
-  ${
+  const bankSection = hasBankDetails
+    ? `<div style="margin-top:28px;padding:18px 20px;background:#fffbf5;border:1px solid #f0e9df;border-radius:8px">
+        <h3 style="margin:0 0 14px;font-size:13px;font-weight:700;color:#B8924A;letter-spacing:0.5px;text-transform:uppercase">Payment Bank Details</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          ${bankName ? `<div><p style="margin:0;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">Bank Name</p><p style="margin:4px 0 0;font-size:13px;font-weight:600;color:#2d2d2d">${bankName}</p></div>` : ""}
+          ${accountNumber ? `<div><p style="margin:0;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">Account Number</p><p style="margin:4px 0 0;font-size:13px;font-weight:600;color:#2d2d2d">${accountNumber}</p></div>` : ""}
+          ${ifscCode ? `<div><p style="margin:0;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">IFSC Code</p><p style="margin:4px 0 0;font-size:13px;font-weight:600;color:#2d2d2d">${ifscCode}</p></div>` : ""}
+          ${branch ? `<div><p style="margin:0;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">Branch</p><p style="margin:4px 0 0;font-size:13px;font-weight:600;color:#2d2d2d">${branch}</p></div>` : ""}
+        </div>
+      </div>`
+    : "";
+
+  const paymentSection =
     salePayments.length > 0
-      ? `<h3 style="color:#B8924A">Payment History</h3>
-  <table><thead><tr><th>Date</th><th>Mode</th><th>Amount</th><th>Notes</th></tr></thead><tbody>${paymentRows}</tbody></table>`
-      : ""
-  }
-  <div style="margin-top:40px;text-align:center;color:#999;font-size:11px">Thank you for your business!</div>
-  <script>window.onload=function(){window.print();}</script>
-  </body></html>`;
+      ? `<div style="margin-top:28px">
+          <h3 style="margin:0 0 12px;font-size:13px;font-weight:700;color:#B8924A;letter-spacing:0.5px;text-transform:uppercase">Payment History</h3>
+          <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #f0e9df;border-radius:8px;overflow:hidden">
+            <thead>
+              <tr style="background:#B8924A">
+                <th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Date</th>
+                <th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Mode</th>
+                <th style="padding:10px 12px;text-align:right;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Amount</th>
+                <th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Notes</th>
+              </tr>
+            </thead>
+            <tbody>${paymentRows}</tbody>
+          </table>
+        </div>`
+      : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Invoice ${sale.invoiceNumber}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f5f0eb;
+      color: #2d2d2d;
+      padding: 32px 20px;
+    }
+    .invoice-wrapper {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      overflow: hidden;
+    }
+    .invoice-header {
+      background: linear-gradient(135deg, #2d1f0e 0%, #4a3218 100%);
+      padding: 28px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .invoice-body { padding: 28px 32px; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .invoice-wrapper { box-shadow: none; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-wrapper">
+    <!-- Header -->
+    <div class="invoice-header">
+      <div style="display:flex;align-items:center;gap:16px">
+        <img src="${logoUrl}" alt="Logo" style="height:72px;width:72px;object-fit:contain;border-radius:6px;background:#fff;padding:4px" />
+        <div>
+          <h1 style="font-size:20px;font-weight:800;color:#D4A853;letter-spacing:1px;margin-bottom:4px">${companyName.toUpperCase()}</h1>
+          <p style="font-size:12px;color:#c9a87a;margin-bottom:6px;letter-spacing:0.5px">Premium Marble &amp; Tiles</p>
+          ${companyAddress ? `<p style="font-size:11px;color:#a08060">${companyAddress}${companyCity ? `, ${companyCity}` : ""}</p>` : ""}
+          ${companyPhone ? `<p style="font-size:11px;color:#a08060">&#128222; ${companyPhone}</p>` : ""}
+          ${companyGstin ? `<p style="font-size:11px;color:#a08060">GSTIN: ${companyGstin}</p>` : ""}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="background:rgba(255,255,255,0.10);border:1px solid rgba(212,168,83,0.4);border-radius:8px;padding:12px 16px">
+          <p style="font-size:22px;font-weight:800;color:#D4A853;letter-spacing:2px;margin-bottom:6px">INVOICE</p>
+          <p style="font-size:15px;font-weight:700;color:#fff;margin-bottom:4px">${sale.invoiceNumber}</p>
+          <p style="font-size:11px;color:#c9a87a">Date: ${invoiceDate}</p>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(212,168,83,0.3)">
+            <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:${sale.paymentStatus === "paid" ? "#22c55e" : sale.paymentStatus === "partial" ? "#f59e0b" : "#ef4444"};color:#fff">${sale.paymentStatus.toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="invoice-body">
+      <!-- Bill To -->
+      <div style="margin-bottom:24px;padding:16px 20px;background:#fffbf5;border:1px solid #f0e9df;border-radius:8px">
+        <p style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Bill To</p>
+        <p style="font-size:17px;font-weight:700;color:#2d2d2d;margin-bottom:4px">${customer?.name ?? "Customer"}</p>
+        ${customer?.phone ? `<p style="font-size:13px;color:#666;margin-bottom:2px">&#128222; ${customer.phone}</p>` : ""}
+        ${customer?.address ? `<p style="font-size:13px;color:#666">&#128205; ${customer.address}</p>` : ""}
+      </div>
+
+      <!-- Items Table -->
+      <div style="margin-bottom:24px;border:1px solid #f0e9df;border-radius:8px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#B8924A">
+              <th style="padding:11px 12px;text-align:left;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Sr.</th>
+              <th style="padding:11px 12px;text-align:left;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Product</th>
+              <th style="padding:11px 12px;text-align:center;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Qty</th>
+              <th style="padding:11px 12px;text-align:right;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Unit Price</th>
+              <th style="padding:11px 12px;text-align:center;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">GST Rate</th>
+              <th style="padding:11px 12px;text-align:right;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">GST Amt</th>
+              <th style="padding:11px 12px;text-align:right;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">Total</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+      </div>
+
+      <!-- Totals -->
+      <div style="display:flex;justify-content:flex-end;margin-bottom:24px">
+        <div style="width:300px;border:1px solid #f0e9df;border-radius:8px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse">
+            <tbody>
+              <tr style="background:#fafafa">
+                <td style="padding:9px 14px;font-size:13px;color:#666">Subtotal</td>
+                <td style="padding:9px 14px;font-size:13px;text-align:right;color:#2d2d2d">&#8377;${(Number(sale.subtotal) / 100).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="padding:9px 14px;font-size:13px;color:#666">Total GST</td>
+                <td style="padding:9px 14px;font-size:13px;text-align:right;color:#2d2d2d">&#8377;${(Number(sale.totalGST) / 100).toFixed(2)}</td>
+              </tr>
+              ${Number(sale.transportCharge) > 0 ? `<tr style="background:#fafafa"><td style="padding:9px 14px;font-size:13px;color:#666">Transport</td><td style="padding:9px 14px;font-size:13px;text-align:right;color:#2d2d2d">&#8377;${(Number(sale.transportCharge) / 100).toFixed(2)}</td></tr>` : ""}
+              ${Number(sale.discount) > 0 ? `<tr><td style="padding:9px 14px;font-size:13px;color:#666">Discount</td><td style="padding:9px 14px;font-size:13px;text-align:right;color:#22c55e">-&#8377;${(Number(sale.discount) / 100).toFixed(2)}</td></tr>` : ""}
+              <tr style="background:#B8924A">
+                <td style="padding:12px 14px;font-size:15px;font-weight:700;color:#fff">Grand Total</td>
+                <td style="padding:12px 14px;font-size:15px;font-weight:700;text-align:right;color:#fff">&#8377;${(Number(sale.grandTotal) / 100).toFixed(2)}</td>
+              </tr>
+              ${dueAmount > 0n ? `<tr style="background:#fff8f0"><td style="padding:9px 14px;font-size:12px;color:#c0392b;font-weight:600">Outstanding Due</td><td style="padding:9px 14px;font-size:12px;text-align:right;color:#c0392b;font-weight:600">&#8377;${(Number(dueAmount) / 100).toFixed(2)}</td></tr>` : `<tr style="background:#f0fff4"><td colspan="2" style="padding:9px 14px;font-size:12px;color:#22c55e;font-weight:600;text-align:center">&#10003; Fully Paid</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      ${paymentSection}
+      ${bankSection}
+
+      <!-- Footer -->
+      <div style="margin-top:32px;padding-top:20px;border-top:1px solid #f0e9df;text-align:center">
+        <p style="font-size:15px;font-weight:600;color:#B8924A;margin-bottom:6px">Thank you for your business!</p>
+        <p style="font-size:11px;color:#aaa">All disputes subject to local jurisdiction.</p>
+        <p style="font-size:12px;color:#B8924A;font-weight:600;margin-top:8px;letter-spacing:0.5px">${companyName.toUpperCase()}</p>
+      </div>
+    </div>
+  </div>
+  <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
 
   const w = window.open("", "_blank");
   if (w) {
@@ -372,8 +521,6 @@ export default function SalesPage() {
       };
 
       await actor.addSale(sale);
-
-      // Payment is recorded separately via PaymentsPage
 
       toast.success(`Invoice ${invoiceNumber} created!`);
       setOpen(false);
