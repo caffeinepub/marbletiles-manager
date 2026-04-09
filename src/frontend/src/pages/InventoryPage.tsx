@@ -19,9 +19,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Product, ProductCategory } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatINR, rupeesToPaise } from "../lib/formatting";
+import type { Product, ProductCategory } from "../types";
 import { logAudit } from "../utils/audit";
 
 // Encode extra fields into qrCode: SKU||SEP||size||SEP||unit||SEP||supplier
@@ -126,7 +126,11 @@ export default function InventoryPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey triggers reload
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     actor
       .getAllProducts()

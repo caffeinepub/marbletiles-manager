@@ -1,0 +1,177 @@
+type UserProfile = 
+ record {
+   name: text;
+   role: text;
+   username: text;
+ };
+type Time = int;
+type SaleStatus = 
+ variant {
+   paid;
+   partial;
+   unpaid;
+ };
+type SaleItem = 
+ record {
+   gstAmount: nat;
+   gstRate: GSTRate;
+   productId: ProductId;
+   quantity: nat;
+   unitPrice: nat;
+ };
+type SaleId = nat;
+type Sale = 
+ record {
+   createdAt: Time;
+   createdBy: principal;
+   customerId: CustomerId;
+   discount: nat;
+   grandTotal: nat;
+   id: SaleId;
+   invoiceNumber: text;
+   items: vec SaleItem;
+   paymentStatus: SaleStatus;
+   subtotal: nat;
+   totalGST: nat;
+   transportCharge: nat;
+ };
+type Reports = 
+ record {
+   expenses: vec Expense;
+   lowStockReport: vec Product;
+   topSellingProducts: vec Product;
+   totalRevenue: nat;
+   totalSales: nat;
+ };
+type ProductId = nat;
+type ProductCategory = 
+ variant {
+   granite;
+   marble;
+   other;
+   tile;
+ };
+type Product = 
+ record {
+   basePrice: nat;
+   category: ProductCategory;
+   createdAt: Time;
+   currentStock: nat;
+   id: ProductId;
+   minStockAlert: nat;
+   name: text;
+   qrCode: text;
+ };
+type PaymentMode = 
+ variant {
+   bank;
+   cash;
+   cheque;
+   upi;
+ };
+type PaymentId = nat;
+type Payment = 
+ record {
+   amount: nat;
+   date: Time;
+   id: PaymentId;
+   mode: PaymentMode;
+   notes: text;
+   saleId: SaleId;
+ };
+type GSTRate = 
+ record {
+   name: text;
+   percentage: nat;
+ };
+type ExpenseId = nat;
+type ExpenseCategory = 
+ variant {
+   electricity;
+   labour;
+   other;
+   rent;
+   transport;
+ };
+type Expense = 
+ record {
+   amount: nat;
+   category: ExpenseCategory;
+   date: Time;
+   description: text;
+   id: ExpenseId;
+   recordedBy: principal;
+ };
+type CustomerId = nat;
+type Customer = 
+ record {
+   address: text;
+   createdAt: Time;
+   email: text;
+   id: CustomerId;
+   name: text;
+   outstandingDue: nat;
+   phone: text;
+   totalPurchases: nat;
+ };
+type CompanySettings = 
+ record {
+   accountNumber: text;
+   address: text;
+   bankName: text;
+   branch: text;
+   city: text;
+   gstin: text;
+   ifscCode: text;
+   name: text;
+   phone: text;
+ };
+service : {
+  _initializeAccessControlWithSecret: (text) -> ();
+  addCustomer: (customer: Customer) -> (CustomerId);
+  addExpense: (expense: Expense) -> ();
+  addGSTRate: (rate: GSTRate) -> ();
+  addPayment: (payment: Payment) -> (PaymentId);
+  addProduct: (product: Product) -> (ProductId);
+  addProductCategory: (name: text) -> ();
+  addSale: (sale: Sale) -> (SaleId);
+  deleteCustomer: (customerId: CustomerId) -> ();
+  deleteExpense: (id: ExpenseId) -> ();
+  deleteGSTRate: (name: text) -> ();
+  deletePayment: (id: PaymentId) -> ();
+  deleteProduct: (name: text) -> ();
+  deleteProductCategory: (name: text) -> ();
+  deleteSale: (id: SaleId) -> ();
+  getAllCustomers: () -> (vec Customer) query;
+  getAllExpenses: () -> (vec Expense) query;
+  getAllGSTRates: () -> (vec record {
+                               text;
+                               GSTRate;
+                             }) query;
+  getAllPayments: () -> (vec Payment) query;
+  getAllProductCategories: () -> (vec record {
+                                        text;
+                                        ProductCategory;
+                                      }) query;
+  getAllProducts: () -> (vec Product) query;
+  getAllSales: () -> (vec Sale) query;
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCompanySettings: () -> (CompanySettings) query;
+  getCustomer: (id: CustomerId) -> (Customer) query;
+  getPayment: (id: PaymentId) -> (opt Payment) query;
+  getProduct: (name: text) -> (opt Product) query;
+  getReports: () -> (Reports) query;
+  getSale: (id: SaleId) -> (opt Sale) query;
+  getUserProfile: (principal) -> (opt UserProfile) query;
+  hasUserPassword: () -> (bool) query;
+  isFirstUser: () -> (bool) query;
+  saveCallerUserProfile: (UserProfile) -> ();
+  saveCompanySettings: (s: CompanySettings) -> ();
+  setUserPassword: (text) -> ();
+  updateCustomer: (customerId: CustomerId, customer: Customer) -> ();
+  updateExpense: (id: ExpenseId, expense: Expense) -> ();
+  updatePayment: (paymentId: PaymentId, payment: Payment) -> ();
+  updateProduct: (name: text, product: Product) -> ();
+  updateSale: (id: SaleId, sale: Sale) -> ();
+  verifyUserPassword: (text) -> (bool) query;
+}

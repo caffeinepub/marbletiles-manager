@@ -8,7 +8,6 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { useState } from "react";
-import type { UserProfile } from "./backend";
 import Layout from "./components/Layout";
 import { getLocalUser, logoutLocal } from "./hooks/useLocalAuth";
 import AdminPage from "./pages/AdminPage";
@@ -22,6 +21,7 @@ import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
 import SalesPage from "./pages/SalesPage";
 import SettingsPage from "./pages/SettingsPage";
+import type { UserProfile } from "./types";
 
 function RootLayout() {
   const [, setAuthKey] = useState(0);

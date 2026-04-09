@@ -24,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import type { UserProfile } from "../backend";
+import type { UserProfile } from "../types";
 
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },

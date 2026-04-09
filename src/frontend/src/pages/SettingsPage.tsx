@@ -18,9 +18,9 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { GSTRate, ProductCategory } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import type { GSTRate, ProductCategory } from "../types";
 
 const LS_COMPANY = "rrm_company_settings";
 const LS_BACKUP = "rrm_last_backup";
@@ -102,7 +102,12 @@ export default function SettingsPage() {
 
   // Load data
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setGstLoading(false);
+      setCatLoading(false);
+      return;
+    }
     Promise.all([
       actor.getAllGSTRates(),
       actor.getAllProductCategories(),
@@ -115,7 +120,7 @@ export default function SettingsPage() {
       if (profile)
         setMyProfile({
           name: profile.name,
-          username: (profile as any).username || "",
+          username: (profile as { username?: string }).username || "",
         });
     });
   }, [actor, isFetching]);

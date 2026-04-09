@@ -1,8 +1,12 @@
 import Map "mo:core/Map";
 import Time "mo:core/Time";
 import Principal "mo:core/Principal";
-import AccessControl "authorization/access-control";
+import Nat "mo:core/Nat";
+import Text "mo:core/Text";
+import Iter "mo:core/Iter";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   type GSTRate = { name : Text; percentage : Nat };
   type ProductCategory = { #marble; #tile; #granite; #other };
@@ -21,82 +25,51 @@ actor {
   type ExpenseId = Nat;
   type Expense = { id : ExpenseId; category : ExpenseCategory; description : Text; amount : Nat; date : Time.Time; recordedBy : Principal };
 
-  public type CompanySettings = {
-    name : Text;
-    gstin : Text;
-    phone : Text;
-    address : Text;
-    city : Text;
-    bankName : Text;
-    accountNumber : Text;
-    ifscCode : Text;
-    branch : Text;
-  };
-
-  // Keep these stable vars from previous versions to avoid compatibility errors
+  public type CompanySettings = { name : Text; gstin : Text; phone : Text; address : Text; city : Text; bankName : Text; accountNumber : Text; ifscCode : Text; branch : Text };
   type UserProfileStored = { name : Text; role : Text };
-  stable var userProfiles = Map.empty<Principal, UserProfileStored>();
-  stable var userUsernames = Map.empty<Principal, Text>();
-  stable var userPasswords = Map.empty<Principal, Text>();
-  stable var productCategories = Map.empty<Text, ProductCategory>();
-  stable var lots = Map.empty<Text, Product>();
-  stable var wastage = Map.empty<Text, Product>();
-  let accessControlState = AccessControl.initState();
-
   public type UserProfile = { name : Text; role : Text; username : Text };
   public type Reports = { totalSales : Nat; totalRevenue : Nat; expenses : [Expense]; topSellingProducts : [Product]; lowStockReport : [Product] };
 
-  stable var gstRates = Map.empty<Text, GSTRate>();
-  stable var expenses = Map.empty<Nat, Expense>();
-  stable var nextExpenseId = 1;
-  stable var products = Map.empty<Text, Product>();
-  stable var nextProductId = 1;
-  stable var customers = Map.empty<Nat, Customer>();
-  stable var nextCustomerId = 1;
-  stable var sales = Map.empty<Nat, Sale>();
-  stable var nextSaleId = 1;
-  stable var payments = Map.empty<Nat, Payment>();
-  stable var nextPaymentId = 1;
-  stable var customCategoriesMap = Map.empty<Text, Text>();
+  let gstRates : Map.Map<Text, GSTRate> = Map.empty<Text, GSTRate>();
+  let expenses : Map.Map<Nat, Expense> = Map.empty<Nat, Expense>();
+  var nextExpenseId : Nat = 1;
+  let products : Map.Map<Text, Product> = Map.empty<Text, Product>();
+  var nextProductId : Nat = 1;
+  let customers : Map.Map<Nat, Customer> = Map.empty<Nat, Customer>();
+  var nextCustomerId : Nat = 1;
+  let sales : Map.Map<Nat, Sale> = Map.empty<Nat, Sale>();
+  var nextSaleId : Nat = 1;
+  let payments : Map.Map<Nat, Payment> = Map.empty<Nat, Payment>();
+  var nextPaymentId : Nat = 1;
+  let customCategoriesMap : Map.Map<Text, Text> = Map.empty<Text, Text>();
+  let lots : Map.Map<Text, Product> = Map.empty<Text, Product>();
+  let wastage : Map.Map<Text, Product> = Map.empty<Text, Product>();
+  let productCategories : Map.Map<Text, ProductCategory> = Map.empty<Text, ProductCategory>();
+  let userProfiles : Map.Map<Principal, UserProfileStored> = Map.empty<Principal, UserProfileStored>();
+  let userPasswords : Map.Map<Principal, Text> = Map.empty<Principal, Text>();
+  let userUsernames : Map.Map<Principal, Text> = Map.empty<Principal, Text>();
 
-  // Company settings stable storage
-  stable var companySettingsName : Text = "RADHA RANI MARBLE HOUSE";
-  stable var companySettingsGstin : Text = "";
-  stable var companySettingsPhone : Text = "";
-  stable var companySettingsAddress : Text = "";
-  stable var companySettingsCity : Text = "";
-  stable var companySettingsBankName : Text = "";
-  stable var companySettingsAccountNumber : Text = "";
-  stable var companySettingsIfscCode : Text = "";
-  stable var companySettingsBranch : Text = "";
+  var companySettingsName : Text = "RADHA RANI MARBLE HOUSE";
+  var companySettingsGstin : Text = "";
+  var companySettingsPhone : Text = "";
+  var companySettingsAddress : Text = "";
+  var companySettingsCity : Text = "";
+  var companySettingsBankName : Text = "";
+  var companySettingsAccountNumber : Text = "";
+  var companySettingsIfscCode : Text = "";
+  var companySettingsBranch : Text = "";
 
   public query func getCompanySettings() : async CompanySettings {
-    {
-      name = companySettingsName;
-      gstin = companySettingsGstin;
-      phone = companySettingsPhone;
-      address = companySettingsAddress;
-      city = companySettingsCity;
-      bankName = companySettingsBankName;
-      accountNumber = companySettingsAccountNumber;
-      ifscCode = companySettingsIfscCode;
-      branch = companySettingsBranch;
-    }
+    { name = companySettingsName; gstin = companySettingsGstin; phone = companySettingsPhone; address = companySettingsAddress; city = companySettingsCity; bankName = companySettingsBankName; accountNumber = companySettingsAccountNumber; ifscCode = companySettingsIfscCode; branch = companySettingsBranch }
   };
 
   public shared func saveCompanySettings(s : CompanySettings) : async () {
-    companySettingsName := s.name;
-    companySettingsGstin := s.gstin;
-    companySettingsPhone := s.phone;
-    companySettingsAddress := s.address;
-    companySettingsCity := s.city;
-    companySettingsBankName := s.bankName;
-    companySettingsAccountNumber := s.accountNumber;
-    companySettingsIfscCode := s.ifscCode;
-    companySettingsBranch := s.branch;
+    companySettingsName := s.name; companySettingsGstin := s.gstin; companySettingsPhone := s.phone;
+    companySettingsAddress := s.address; companySettingsCity := s.city; companySettingsBankName := s.bankName;
+    companySettingsAccountNumber := s.accountNumber; companySettingsIfscCode := s.ifscCode; companySettingsBranch := s.branch;
   };
 
-  public query func getAllGSTRates() : async [(Text, GSTRate)] { gstRates.toArray() };
+  public query func getAllGSTRates() : async [(Text, GSTRate)] { gstRates.entries().toArray() };
   public shared func addGSTRate(rate : GSTRate) : async () { gstRates.add(rate.name, rate) };
   public shared func deleteGSTRate(name : Text) : async () { gstRates.remove(name) };
 
@@ -104,15 +77,14 @@ actor {
   public shared func addProduct(product : Product) : async ProductId {
     let id = nextProductId;
     products.add(product.name, { product with id; createdAt = Time.now() });
-    nextProductId += 1;
-    id
+    nextProductId += 1; id
   };
   public shared func updateProduct(name : Text, product : Product) : async () { products.add(name, product) };
   public shared func deleteProduct(name : Text) : async () { products.remove(name) };
   public query func getProduct(name : Text) : async ?Product { products.get(name) };
 
   public query func getAllProductCategories() : async [(Text, ProductCategory)] {
-    customCategoriesMap.values().toArray().map(func(n) { (n, #other) })
+    customCategoriesMap.values().map<Text, (Text, ProductCategory)>(func(n) { (n, #other) }).toArray()
   };
   public shared func addProductCategory(name : Text) : async () { customCategoriesMap.add(name, name) };
   public shared func deleteProductCategory(name : Text) : async () { customCategoriesMap.remove(name) };
@@ -121,8 +93,7 @@ actor {
   public shared func addCustomer(customer : Customer) : async CustomerId {
     let id = nextCustomerId;
     customers.add(id, { customer with id; createdAt = Time.now() });
-    nextCustomerId += 1;
-    id
+    nextCustomerId += 1; id
   };
   public shared func updateCustomer(customerId : CustomerId, customer : Customer) : async () { customers.add(customerId, customer) };
   public shared func deleteCustomer(customerId : CustomerId) : async () { customers.remove(customerId) };
@@ -136,19 +107,13 @@ actor {
   public query func getAllSales() : async [Sale] { sales.values().toArray() };
   public shared ({ caller }) func addSale(sale : Sale) : async SaleId {
     let id = nextSaleId;
-    let inv = "INV-" # Nat.toText(1000 + id);
+    let inv = "INV-" # (1000 + id : Nat).toText();
     sales.add(id, { sale with id; invoiceNumber = inv; createdAt = Time.now(); createdBy = caller });
     switch (customers.get(sale.customerId)) {
-      case (?c) {
-        customers.add(sale.customerId, { c with
-          outstandingDue = c.outstandingDue + sale.grandTotal;
-          totalPurchases = c.totalPurchases + sale.grandTotal
-        });
-      };
+      case (?c) { customers.add(sale.customerId, { c with outstandingDue = c.outstandingDue + sale.grandTotal; totalPurchases = c.totalPurchases + sale.grandTotal }) };
       case null {};
     };
-    nextSaleId += 1;
-    id
+    nextSaleId += 1; id
   };
   public shared func updateSale(id : SaleId, sale : Sale) : async () { sales.add(id, sale) };
   public query func getSale(id : SaleId) : async ?Sale { sales.get(id) };
@@ -160,7 +125,7 @@ actor {
     payments.add(id, { payment with id; date = Time.now() });
     switch (sales.get(payment.saleId)) {
       case (?s) {
-        let totalPaid = payments.values().toArray().foldLeft(0, func(acc, p) {
+        let totalPaid = payments.foldLeft(0, func(acc : Nat, _ : Nat, p : Payment) : Nat {
           if (p.saleId == payment.saleId) { acc + p.amount } else { acc }
         }) + payment.amount;
         let newStatus : SaleStatus = if (totalPaid >= s.grandTotal) { #paid } else if (totalPaid > 0) { #partial } else { #unpaid };
@@ -175,8 +140,7 @@ actor {
       };
       case null {};
     };
-    nextPaymentId += 1;
-    id
+    nextPaymentId += 1; id
   };
   public shared func updatePayment(paymentId : PaymentId, payment : Payment) : async () { payments.add(paymentId, payment) };
   public query func getPayment(id : PaymentId) : async ?Payment { payments.get(id) };
@@ -192,8 +156,8 @@ actor {
 
   public query func getReports() : async Reports {
     let allProducts = products.values().toArray();
-    let lowStock = products.filter(func(_, p) { p.currentStock <= p.minStockAlert and p.minStockAlert > 0 }).values().toArray();
-    let totalRev = payments.values().toArray().foldLeft(0, func(acc, p) { acc + p.amount });
+    let lowStock = products.values().filter(func(p : Product) : Bool { p.currentStock <= p.minStockAlert and p.minStockAlert > 0 }).toArray();
+    let totalRev = payments.foldLeft(0, func(acc : Nat, _ : Nat, p : Payment) : Nat { acc + p.amount });
     { totalSales = sales.size(); totalRevenue = totalRev; expenses = expenses.values().toArray(); topSellingProducts = allProducts; lowStockReport = lowStock }
   };
 

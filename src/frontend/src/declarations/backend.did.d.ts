@@ -10,6 +10,17 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface CompanySettings {
+  'branch' : string,
+  'ifscCode' : string,
+  'city' : string,
+  'name' : string,
+  'bankName' : string,
+  'gstin' : string,
+  'address' : string,
+  'accountNumber' : string,
+  'phone' : string,
+}
 export interface Customer {
   'id' : CustomerId,
   'name' : string,
@@ -97,10 +108,11 @@ export type SaleStatus = { 'paid' : null } |
   { 'unpaid' : null } |
   { 'partial' : null };
 export type Time = bigint;
-export interface UserProfile { 'name' : string, 'role' : string }
-export type UserRole = { 'admin' : null } |
-  { 'user' : null } |
-  { 'guest' : null };
+export interface UserProfile {
+  'username' : string,
+  'name' : string,
+  'role' : string,
+}
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addCustomer' : ActorMethod<[Customer], CustomerId>,
@@ -110,10 +122,13 @@ export interface _SERVICE {
   'addProduct' : ActorMethod<[Product], ProductId>,
   'addProductCategory' : ActorMethod<[string], undefined>,
   'addSale' : ActorMethod<[Sale], SaleId>,
-  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'deleteCustomer' : ActorMethod<[CustomerId], undefined>,
   'deleteExpense' : ActorMethod<[ExpenseId], undefined>,
   'deleteGSTRate' : ActorMethod<[string], undefined>,
+  'deletePayment' : ActorMethod<[PaymentId], undefined>,
+  'deleteProduct' : ActorMethod<[string], undefined>,
   'deleteProductCategory' : ActorMethod<[string], undefined>,
+  'deleteSale' : ActorMethod<[SaleId], undefined>,
   'getAllCustomers' : ActorMethod<[], Array<Customer>>,
   'getAllExpenses' : ActorMethod<[], Array<Expense>>,
   'getAllGSTRates' : ActorMethod<[], Array<[string, GSTRate]>>,
@@ -122,21 +137,24 @@ export interface _SERVICE {
   'getAllProducts' : ActorMethod<[], Array<Product>>,
   'getAllSales' : ActorMethod<[], Array<Sale>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
-  'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getCompanySettings' : ActorMethod<[], CompanySettings>,
   'getCustomer' : ActorMethod<[CustomerId], Customer>,
   'getPayment' : ActorMethod<[PaymentId], [] | [Payment]>,
   'getProduct' : ActorMethod<[string], [] | [Product]>,
   'getReports' : ActorMethod<[], Reports>,
   'getSale' : ActorMethod<[SaleId], [] | [Sale]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
-  'isCallerAdmin' : ActorMethod<[], boolean>,
+  'hasUserPassword' : ActorMethod<[], boolean>,
   'isFirstUser' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'saveCompanySettings' : ActorMethod<[CompanySettings], undefined>,
+  'setUserPassword' : ActorMethod<[string], undefined>,
   'updateCustomer' : ActorMethod<[CustomerId, Customer], undefined>,
   'updateExpense' : ActorMethod<[ExpenseId, Expense], undefined>,
   'updatePayment' : ActorMethod<[PaymentId, Payment], undefined>,
   'updateProduct' : ActorMethod<[string, Product], undefined>,
   'updateSale' : ActorMethod<[SaleId, Sale], undefined>,
+  'verifyUserPassword' : ActorMethod<[string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

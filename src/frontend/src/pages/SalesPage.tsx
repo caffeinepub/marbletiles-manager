@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useActor } from "../hooks/useActor";
+import { formatDate, formatINR, rupeesToPaise } from "../lib/formatting";
 import {
   type Customer,
   type GSTRate,
@@ -38,9 +40,7 @@ import {
   type Sale,
   type SaleItem,
   SaleStatus,
-} from "../backend";
-import { useActor } from "../hooks/useActor";
-import { formatDate, formatINR, rupeesToPaise } from "../lib/formatting";
+} from "../types";
 
 const LS_COMPANY = "rrm_company_settings";
 
@@ -342,7 +342,11 @@ export default function SalesPage() {
   const [notes, setNotes] = useState("");
 
   const loadData = () => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       actor.getAllSales(),
@@ -362,7 +366,11 @@ export default function SalesPage() {
   };
 
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       actor.getAllSales(),

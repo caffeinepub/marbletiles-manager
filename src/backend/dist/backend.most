@@ -1,0 +1,271 @@
+// Version: 3.0.0
+type CustomerId__861616703 = Nat;
+type Customer__263943254 =
+  {
+    address : Text;
+    createdAt : Time__900049286;
+    email : Text;
+    id : CustomerId__861616703;
+    name : Text;
+    outstandingDue : Nat;
+    phone : Text;
+    totalPurchases : Nat
+  };
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type ExpenseCategory__184047055 =
+  {#electricity; #labour; #other; #rent; #transport};
+type ExpenseId__305264908 = Nat;
+type Expense__25862281 =
+  {
+    amount : Nat;
+    category : ExpenseCategory__184047055;
+    date : Time__900049286;
+    description : Text;
+    id : ExpenseId__305264908;
+    recordedBy : Principal
+  };
+type GSTRate__329569861 = {name : Text; percentage : Nat};
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type OldAccessControlState__841599830 =
+  {
+    var adminAssigned : Bool;
+    userRoles : Map__605269027<Principal, OldUserRole__889293160>
+  };
+type OldCustomer__268643839 =
+  {
+    address : Text;
+    createdAt : Time__900049286;
+    email : Text;
+    id : Nat;
+    name : Text;
+    outstandingDue : Nat;
+    phone : Text;
+    totalPurchases : Nat
+  };
+type OldExpenseCategory__1051140202 =
+  {#electricity; #labour; #other; #rent; #transport};
+type OldExpense__340868419 =
+  {
+    amount : Nat;
+    category : OldExpenseCategory__1051140202;
+    date : Time__900049286;
+    description : Text;
+    id : Nat;
+    recordedBy : Principal
+  };
+type OldGSTRate__631793731 = {name : Text; percentage : Nat};
+type OldPaymentMode__791345429 = {#bank; #cash; #cheque; #upi};
+type OldPayment__783409556 =
+  {
+    amount : Nat;
+    date : Time__900049286;
+    id : Nat;
+    mode : OldPaymentMode__791345429;
+    notes : Text;
+    saleId : Nat
+  };
+type OldProductCategory__304516802 = {#granite; #marble; #other; #tile};
+type OldProduct__278484740 =
+  {
+    basePrice : Nat;
+    category : OldProductCategory__304516802;
+    createdAt : Time__900049286;
+    currentStock : Nat;
+    id : Nat;
+    minStockAlert : Nat;
+    name : Text;
+    qrCode : Text
+  };
+type OldSaleItem__751652278 =
+  {
+    gstAmount : Nat;
+    gstRate : OldGSTRate__631793731;
+    productId : Nat;
+    quantity : Nat;
+    unitPrice : Nat
+  };
+type OldSaleStatus__836089805 = {#paid; #partial; #unpaid};
+type OldSale__972883563 =
+  {
+    createdAt : Time__900049286;
+    createdBy : Principal;
+    customerId : Nat;
+    discount : Nat;
+    grandTotal : Nat;
+    id : Nat;
+    invoiceNumber : Text;
+    items : [OldSaleItem__751652278];
+    paymentStatus : OldSaleStatus__836089805;
+    subtotal : Nat;
+    totalGST : Nat;
+    transportCharge : Nat
+  };
+type OldUserProfileStored__1058053910 = {name : Text; role : Text};
+type OldUserRole__889293160 = {#admin; #guest; #user};
+type PaymentId__350708989 = Nat;
+type PaymentMode__936494874 = {#bank; #cash; #cheque; #upi};
+type Payment__159206904 =
+  {
+    amount : Nat;
+    date : Time__900049286;
+    id : PaymentId__350708989;
+    mode : PaymentMode__936494874;
+    notes : Text;
+    saleId : SaleId__748427435
+  };
+type ProductCategory__686245569 = {#granite; #marble; #other; #tile};
+type ProductId__779996770 = Nat;
+type Product__853085059 =
+  {
+    basePrice : Nat;
+    category : ProductCategory__686245569;
+    createdAt : Time__900049286;
+    currentStock : Nat;
+    id : ProductId__779996770;
+    minStockAlert : Nat;
+    name : Text;
+    qrCode : Text
+  };
+type SaleId__748427435 = Nat;
+type SaleItem__546740941 =
+  {
+    gstAmount : Nat;
+    gstRate : GSTRate__329569861;
+    productId : ProductId__779996770;
+    quantity : Nat;
+    unitPrice : Nat
+  };
+type SaleStatus__921747655 = {#paid; #partial; #unpaid};
+type Sale__221607697 =
+  {
+    createdAt : Time__900049286;
+    createdBy : Principal;
+    customerId : CustomerId__861616703;
+    discount : Nat;
+    grandTotal : Nat;
+    id : SaleId__748427435;
+    invoiceNumber : Text;
+    items : [SaleItem__546740941];
+    paymentStatus : SaleStatus__921747655;
+    subtotal : Nat;
+    totalGST : Nat;
+    transportCharge : Nat
+  };
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type UserProfileStored__256138927 = {name : Text; role : Text};
+actor ({
+  in accessControlState : OldAccessControlState__841599830;
+  in var companySettingsAccountNumber : Text;
+  in var companySettingsAddress : Text;
+  in var companySettingsBankName : Text;
+  in var companySettingsBranch : Text;
+  in var companySettingsCity : Text;
+  in var companySettingsGstin : Text;
+  in var companySettingsIfscCode : Text;
+  in var companySettingsName : Text;
+  in var companySettingsPhone : Text;
+  in customCategoriesMap : Map__605269027<Text, Text>;
+  in customers : Map__605269027<Nat, OldCustomer__268643839>;
+  in expenses : Map__605269027<Nat, OldExpense__340868419>;
+  in gstRates : Map__605269027<Text, OldGSTRate__631793731>;
+  in lots : Map__605269027<Text, OldProduct__278484740>;
+  in var nextCustomerId : Nat;
+  in var nextExpenseId : Nat;
+  in var nextPaymentId : Nat;
+  in var nextProductId : Nat;
+  in var nextSaleId : Nat;
+  in payments : Map__605269027<Nat, OldPayment__783409556>;
+  in productCategories : Map__605269027<Text, OldProductCategory__304516802>;
+  in products : Map__605269027<Text, OldProduct__278484740>;
+  in sales : Map__605269027<Nat, OldSale__972883563>;
+  in userPasswords : Map__605269027<Principal, Text>;
+  in userProfiles :
+    Map__605269027<Principal, OldUserProfileStored__1058053910>;
+  in userUsernames : Map__605269027<Principal, Text>;
+  in wastage : Map__605269027<Text, OldProduct__278484740>
+}, {
+  stable var companySettingsAccountNumber : Text;
+  stable var companySettingsAddress : Text;
+  stable var companySettingsBankName : Text;
+  stable var companySettingsBranch : Text;
+  stable var companySettingsCity : Text;
+  stable var companySettingsGstin : Text;
+  stable var companySettingsIfscCode : Text;
+  stable var companySettingsName : Text;
+  stable var companySettingsPhone : Text;
+  stable customCategoriesMap :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable customers :
+    {
+      var root : Node__46230540<Nat, Customer__263943254>;
+      var size : Nat__490723111
+    };
+  stable expenses :
+    {
+      var root : Node__46230540<Nat, Expense__25862281>;
+      var size : Nat__490723111
+    };
+  stable gstRates :
+    {
+      var root : Node__46230540<Text, GSTRate__329569861>;
+      var size : Nat__490723111
+    };
+  stable lots :
+    {
+      var root : Node__46230540<Text, Product__853085059>;
+      var size : Nat__490723111
+    };
+  stable var nextCustomerId : Nat;
+  stable var nextExpenseId : Nat;
+  stable var nextPaymentId : Nat;
+  stable var nextProductId : Nat;
+  stable var nextSaleId : Nat;
+  stable payments :
+    {
+      var root : Node__46230540<Nat, Payment__159206904>;
+      var size : Nat__490723111
+    };
+  stable productCategories :
+    {
+      var root : Node__46230540<Text, ProductCategory__686245569>;
+      var size : Nat__490723111
+    };
+  stable products :
+    {
+      var root : Node__46230540<Text, Product__853085059>;
+      var size : Nat__490723111
+    };
+  stable sales :
+    {
+      var root : Node__46230540<Nat, Sale__221607697>;
+      var size : Nat__490723111
+    };
+  stable userPasswords :
+    {var root : Node__46230540<Principal, Text>; var size : Nat__490723111};
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfileStored__256138927>;
+      var size : Nat__490723111
+    };
+  stable userUsernames :
+    {var root : Node__46230540<Principal, Text>; var size : Nat__490723111};
+  stable wastage :
+    {
+      var root : Node__46230540<Text, Product__853085059>;
+      var size : Nat__490723111
+    }
+}) ;

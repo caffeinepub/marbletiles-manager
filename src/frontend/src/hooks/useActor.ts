@@ -1,59 +1,30 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import type { backendInterface } from "../backend";
-import { createActorWithConfig } from "../config";
-import { getSecretParameter } from "../utils/urlParams";
-import { useInternetIdentity } from "./useInternetIdentity";
+/**
+ * useActor — wraps the caffeine core-infrastructure hook with our backend's createActor.
+ *
+ * All pages call:  const { actor, isFetching } = useActor();
+ *
+ * The Backend class from backend.ts has an empty interface (bindgen hasn't run yet),
+ * so we cast to RRMHActor which declares all the actual canister methods.
+ * The runtime binding via createActorWithConfig still connects to the real canister.
+ */
 
-const ACTOR_QUERY_KEY = "actor";
-export function useActor() {
-  const { identity } = useInternetIdentity();
-  const queryClient = useQueryClient();
-  const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
-    queryFn: async () => {
-      const isAuthenticated = !!identity;
+import { useActor as useCaffeineActor } from "@caffeineai/core-infrastructure";
+import { createActor } from "../backend";
+import type { RRMHActor } from "../types";
 
-      if (!isAuthenticated) {
-        // Return anonymous actor if not authenticated
-        return await createActorWithConfig();
-      }
+export interface UseActorResult {
+  actor: RRMHActor | null;
+  isFetching: boolean;
+  /** true once the actor query has settled (either actor loaded or failed) */
+  isReady: boolean;
+}
 
-      const actorOptions = {
-        agentOptions: {
-          identity,
-        },
-      };
-
-      const actor = await createActorWithConfig(actorOptions);
-      const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await actor._initializeAccessControlWithSecret(adminToken);
-      return actor;
-    },
-    // Only refetch when identity changes
-    staleTime: Number.POSITIVE_INFINITY,
-    // This will cause the actor to be recreated when the identity changes
-    enabled: true,
-  });
-
-  // When the actor changes, invalidate dependent queries
-  useEffect(() => {
-    if (actorQuery.data) {
-      queryClient.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
-      });
-      queryClient.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
-      });
-    }
-  }, [actorQuery.data, queryClient]);
-
+export function useActor(): UseActorResult {
+  const result = useCaffeineActor(createActor);
+  const isReady = !result.isFetching;
   return {
-    actor: actorQuery.data || null,
-    isFetching: actorQuery.isFetching,
+    actor: result.actor as unknown as RRMHActor | null,
+    isFetching: result.isFetching,
+    isReady,
   };
 }

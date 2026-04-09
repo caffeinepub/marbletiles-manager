@@ -12,9 +12,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Expense, Payment } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR } from "../lib/formatting";
+import type { Expense, Payment } from "../types";
 
 const MONTHS = [
   "Jan",
@@ -46,7 +46,11 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([actor.getAllPayments(), actor.getAllExpenses()])
       .then(([p, e]) => {
@@ -56,8 +60,8 @@ export default function FinancePage() {
       .finally(() => setLoading(false));
   }, [actor, isFetching]);
 
-  const totalIncome = payments.reduce((s, p) => s + p.amount, 0n);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
+  const totalIncome = payments.reduce((s, p) => s + p.amount, BigInt(0));
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, BigInt(0));
   const netProfit = totalIncome - totalExpenses;
 
   const now = new Date();

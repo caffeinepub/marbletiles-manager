@@ -15,9 +15,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Customer, Expense, Payment, Product, Sale } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR } from "../lib/formatting";
+import type { Customer, Expense, Payment, Product, Sale } from "../types";
 
 const MONTHS = [
   "Jan",
@@ -44,7 +44,11 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       actor.getAllSales(),
@@ -98,7 +102,7 @@ export default function ReportsPage() {
   // Inventory valuation
   const inventoryValue = products.reduce(
     (s, p) => s + p.basePrice * p.currentStock,
-    0n,
+    BigInt(0),
   );
 
   // Outstanding customers
@@ -106,9 +110,12 @@ export default function ReportsPage() {
     .filter((c) => c.outstandingDue > 0n)
     .sort((a, b) => (b.outstandingDue > a.outstandingDue ? 1 : -1));
 
-  const totalRevenue = sales.reduce((s, sale) => s + sale.grandTotal, 0n);
-  const totalCollected = payments.reduce((s, p) => s + p.amount, 0n);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
+  const totalRevenue = sales.reduce(
+    (s, sale) => s + sale.grandTotal,
+    BigInt(0),
+  );
+  const totalCollected = payments.reduce((s, p) => s + p.amount, BigInt(0));
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, BigInt(0));
   const netProfit = totalCollected - totalExpenses;
 
   const exportCSV = () => {
@@ -292,7 +299,9 @@ export default function ReportsPage() {
               </p>
               <p className="text-sm text-gray-500 mt-2">
                 {products.length} products ·{" "}
-                {products.reduce((s, p) => s + p.currentStock, 0n).toString()}{" "}
+                {products
+                  .reduce((s, p) => s + p.currentStock, BigInt(0))
+                  .toString()}{" "}
                 units
               </p>
             </div>

@@ -10,8 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Info, Lock, Shield, ShieldAlert, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { UserProfile } from "../backend";
 import { useActor } from "../hooks/useActor";
+import type { UserProfile } from "../types";
 
 type PrincipalLike = { toText: () => string };
 type UserEntry = [PrincipalLike, UserProfile];
@@ -72,7 +72,11 @@ export default function AdminPage() {
   }, [actor]);
 
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     fetchData();
   }, [actor, isFetching, fetchData]);
 

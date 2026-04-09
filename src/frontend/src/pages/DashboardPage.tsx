@@ -18,9 +18,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Customer, Expense, Payment, Product, Sale } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR } from "../lib/formatting";
+import type { Customer, Expense, Payment, Product, Sale } from "../types";
 
 const MONTHS = [
   "Jan",
@@ -53,7 +53,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       actor.getAllSales(),
@@ -70,12 +74,16 @@ export default function DashboardPage() {
         setCustomers(c);
       })
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actor, isFetching]);
 
-  const totalRevenue = sales.reduce((s, sale) => s + sale.grandTotal, 0n);
-  const totalCollected = payments.reduce((s, p) => s + p.amount, 0n);
+  const totalRevenue = sales.reduce(
+    (s, sale) => s + sale.grandTotal,
+    BigInt(0),
+  );
+  const totalCollected = payments.reduce((s, p) => s + p.amount, BigInt(0));
   const outstandingDues = totalRevenue - totalCollected;
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, BigInt(0));
   const totalProfit = totalCollected - totalExpenses;
   const lowStockItems = products.filter(
     (p) => p.currentStock <= p.minStockAlert,

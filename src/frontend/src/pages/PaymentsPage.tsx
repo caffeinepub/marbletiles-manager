@@ -29,10 +29,10 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Customer, Payment, Sale } from "../backend";
-import { PaymentMode } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR, rupeesToPaise } from "../lib/formatting";
+import type { Customer, Payment, Sale } from "../types";
+import { PaymentMode } from "../types";
 
 const modeLabel = (m: string) => {
   const map: Record<string, string> = {
@@ -80,7 +80,11 @@ export default function PaymentsPage() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     // refreshKey is used to trigger re-fetch after mutations
     void refreshKey;
     setLoading(true);
@@ -106,12 +110,12 @@ export default function PaymentsPage() {
     : [];
 
   // Compute due for a sale
-  const getDue = (saleId: bigint) => {
+  const getDue = (saleId: bigint): bigint => {
     const sale = sales.find((s) => s.id === saleId);
-    if (!sale) return 0n;
+    if (!sale) return BigInt(0);
     const collected = payments
       .filter((p) => p.saleId === saleId)
-      .reduce((acc, p) => acc + p.amount, 0n);
+      .reduce((acc, p) => acc + p.amount, BigInt(0));
     return sale.grandTotal - collected;
   };
 
@@ -217,16 +221,16 @@ export default function PaymentsPage() {
   // Summary cards
   const totalCash = payments
     .filter((p) => p.mode === "cash")
-    .reduce((s, p) => s + p.amount, 0n);
+    .reduce((s, p) => s + p.amount, BigInt(0));
   const totalUpi = payments
     .filter((p) => p.mode === "upi")
-    .reduce((s, p) => s + p.amount, 0n);
+    .reduce((s, p) => s + p.amount, BigInt(0));
   const totalCheque = payments
     .filter((p) => p.mode === "cheque")
-    .reduce((s, p) => s + p.amount, 0n);
+    .reduce((s, p) => s + p.amount, BigInt(0));
   const totalBank = payments
     .filter((p) => p.mode === "bank")
-    .reduce((s, p) => s + p.amount, 0n);
+    .reduce((s, p) => s + p.amount, BigInt(0));
 
   if (loading) {
     return (

@@ -29,9 +29,9 @@ import {
   Tooltip,
 } from "recharts";
 import { toast } from "sonner";
-import { type Expense, ExpenseCategory } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR, rupeesToPaise } from "../lib/formatting";
+import { type Expense, ExpenseCategory } from "../types";
 
 const catLabel: Record<string, string> = {
   labour: "Labour",
@@ -67,7 +67,7 @@ const catBadge = (c: string) => {
 };
 
 const emptyForm = () => ({
-  category: ExpenseCategory.other as ExpenseCategory,
+  category: ExpenseCategory.other as string,
   description: "",
   amountRupees: "",
   date: new Date().toISOString().split("T")[0],
@@ -84,7 +84,11 @@ export default function ExpensesPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     // refreshKey triggers re-fetch after mutations
     void refreshKey;
     setLoading(true);
@@ -103,7 +107,7 @@ export default function ExpensesPage() {
   const openEdit = (exp: Expense) => {
     setEditId(exp.id);
     setForm({
-      category: exp.category as ExpenseCategory,
+      category: exp.category as string,
       description: exp.description,
       amountRupees: String(Number(exp.amount) / 100),
       date: new Date(Number(exp.date) / 1_000_000).toISOString().split("T")[0],
@@ -162,7 +166,7 @@ export default function ExpensesPage() {
   };
 
   // Category totals
-  const categories = Object.values(ExpenseCategory);
+  const categories = Object.values(ExpenseCategory) as string[];
   const catTotals = categories
     .map((cat) => ({
       name: catLabel[cat] ?? cat,
@@ -170,13 +174,13 @@ export default function ExpensesPage() {
         Number(
           expenses
             .filter((e) => e.category === cat)
-            .reduce((s, e) => s + e.amount, 0n),
+            .reduce((s, e) => s + e.amount, BigInt(0)),
         ) / 100,
       key: cat,
     }))
     .filter((c) => c.value > 0);
 
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0n);
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, BigInt(0));
 
   if (loading) {
     return (
@@ -209,7 +213,7 @@ export default function ExpensesPage() {
           {categories.map((cat) => {
             const amt = expenses
               .filter((e) => e.category === cat)
-              .reduce((s, e) => s + e.amount, 0n);
+              .reduce((s, e) => s + e.amount, BigInt(0));
             return (
               <Card
                 key={cat}
@@ -365,7 +369,7 @@ export default function ExpensesPage() {
               <Select
                 value={form.category}
                 onValueChange={(v) =>
-                  setForm((f) => ({ ...f, category: v as ExpenseCategory }))
+                  setForm((f) => ({ ...f, category: v as string }))
                 }
               >
                 <SelectTrigger data-ocid="expenses.category_select">

@@ -8,20 +8,16 @@ export interface None {
 }
 export type Option<T> = Some<T> | None;
 export interface UserProfile {
+    username: string;
     name: string;
     role: string;
-    username: string;
 }
-export interface SaleItem {
-    productId: ProductId;
-    gstAmount: bigint;
-    quantity: bigint;
-    gstRate: GSTRate;
-    unitPrice: bigint;
-}
-export interface GSTRate {
-    name: string;
-    percentage: bigint;
+export interface Reports {
+    lowStockReport: Array<Product>;
+    expenses: Array<Expense>;
+    totalSales: bigint;
+    topSellingProducts: Array<Product>;
+    totalRevenue: bigint;
 }
 export type Time = bigint;
 export interface Payment {
@@ -69,6 +65,28 @@ export type CustomerId = bigint;
 export type ExpenseId = bigint;
 export type SaleId = bigint;
 export type ProductId = bigint;
+export interface CompanySettings {
+    branch: string;
+    ifscCode: string;
+    city: string;
+    name: string;
+    bankName: string;
+    gstin: string;
+    address: string;
+    accountNumber: string;
+    phone: string;
+}
+export interface GSTRate {
+    name: string;
+    percentage: bigint;
+}
+export interface SaleItem {
+    productId: ProductId;
+    gstAmount: bigint;
+    quantity: bigint;
+    gstRate: GSTRate;
+    unitPrice: bigint;
+}
 export interface Product {
     id: ProductId;
     name: string;
@@ -78,24 +96,6 @@ export interface Product {
     currentStock: bigint;
     basePrice: bigint;
     qrCode: string;
-}
-export interface Reports {
-    lowStockReport: Array<Product>;
-    expenses: Array<Expense>;
-    totalSales: bigint;
-    topSellingProducts: Array<Product>;
-    totalRevenue: bigint;
-}
-export interface CompanySettings {
-    name: string;
-    gstin: string;
-    phone: string;
-    address: string;
-    city: string;
-    bankName: string;
-    accountNumber: string;
-    ifscCode: string;
-    branch: string;
 }
 export enum ExpenseCategory {
     other = "other",
@@ -121,28 +121,21 @@ export enum SaleStatus {
     unpaid = "unpaid",
     partial = "partial"
 }
-export enum UserRole {
-    admin = "admin",
-    user = "user",
-    guest = "guest"
-}
 export interface backendInterface {
-    isFirstUser(): Promise<boolean>;
     addCustomer(customer: Customer): Promise<CustomerId>;
     addExpense(expense: Expense): Promise<void>;
     addGSTRate(rate: GSTRate): Promise<void>;
     addPayment(payment: Payment): Promise<PaymentId>;
     addProduct(product: Product): Promise<ProductId>;
-    addProductCategory(category: string): Promise<void>;
+    addProductCategory(name: string): Promise<void>;
     addSale(sale: Sale): Promise<SaleId>;
-    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    deleteCustomer(customerId: CustomerId): Promise<void>;
     deleteExpense(id: ExpenseId): Promise<void>;
     deleteGSTRate(name: string): Promise<void>;
-    deleteProductCategory(category: string): Promise<void>;
-    deleteProduct(name: string): Promise<void>;
-    deleteCustomer(id: CustomerId): Promise<void>;
-    deleteSale(id: SaleId): Promise<void>;
     deletePayment(id: PaymentId): Promise<void>;
+    deleteProduct(name: string): Promise<void>;
+    deleteProductCategory(name: string): Promise<void>;
+    deleteSale(id: SaleId): Promise<void>;
     getAllCustomers(): Promise<Array<Customer>>;
     getAllExpenses(): Promise<Array<Expense>>;
     getAllGSTRates(): Promise<Array<[string, GSTRate]>>;
@@ -151,24 +144,22 @@ export interface backendInterface {
     getAllProducts(): Promise<Array<Product>>;
     getAllSales(): Promise<Array<Sale>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
-    getCallerUserRole(): Promise<UserRole>;
+    getCompanySettings(): Promise<CompanySettings>;
     getCustomer(id: CustomerId): Promise<Customer>;
     getPayment(id: PaymentId): Promise<Payment | null>;
     getProduct(name: string): Promise<Product | null>;
     getReports(): Promise<Reports>;
     getSale(id: SaleId): Promise<Sale | null>;
-    getUserProfile(user: Principal): Promise<UserProfile | null>;
+    getUserProfile(arg0: Principal): Promise<UserProfile | null>;
     hasUserPassword(): Promise<boolean>;
-    isCallerAdmin(): Promise<boolean>;
-    saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    setUserPassword(password: string): Promise<void>;
+    isFirstUser(): Promise<boolean>;
+    saveCallerUserProfile(arg0: UserProfile): Promise<void>;
+    saveCompanySettings(s: CompanySettings): Promise<void>;
+    setUserPassword(arg0: string): Promise<void>;
     updateCustomer(customerId: CustomerId, customer: Customer): Promise<void>;
     updateExpense(id: ExpenseId, expense: Expense): Promise<void>;
     updatePayment(paymentId: PaymentId, payment: Payment): Promise<void>;
     updateProduct(name: string, product: Product): Promise<void>;
     updateSale(id: SaleId, sale: Sale): Promise<void>;
-    verifyUserPassword(password: string): Promise<boolean>;
-    getCompanySettings(): Promise<CompanySettings>;
-    saveCompanySettings(settings: CompanySettings): Promise<void>;
-    _initializeAccessControlWithSecret(token: string): Promise<void>;
+    verifyUserPassword(arg0: string): Promise<boolean>;
 }

@@ -24,9 +24,9 @@ import { Principal } from "@icp-sdk/core/principal";
 import { Edit2, Loader2, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Customer, Sale } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { formatDate, formatINR } from "../lib/formatting";
+import type { Customer, Sale } from "../types";
 
 const emptyForm = () => ({
   name: "",
@@ -53,7 +53,11 @@ export default function CustomersPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is intentional
   useEffect(() => {
-    if (!actor || isFetching) return;
+    if (isFetching) return;
+    if (!actor) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([actor.getAllCustomers(), actor.getAllSales()])
       .then(([custs, s]) => {
